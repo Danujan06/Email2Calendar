@@ -1,186 +1,145 @@
-class PopupManager {
-  constructor() {
-    this.init();
-  }
+// popup.js
+document.addEventListener('DOMContentLoaded', function() {
+  const scanButton = document.getElementById('scanButton');
+  const statusElement = document.getElementById('status');
+  const eventsFoundElement = document.getElementById('eventsFound');
+  const eventsAddedElement = document.getElementById('eventsAdded');
 
-  async init() {
-    await this.loadStatus();
-    this.bindEvents();
-    await this.loadRecentEvents();
-  }
+  // Load saved stats
+  loadStats();
 
-  async loadStatus() {
+  scanButton.addEventListener('click', async function() {
     try {
-      // Get extension status from storage
-      const result = await chrome.storage.local.get([
-        'extensionEnabled', 'eventsFound', 'eventsAdded'
-      ]);
-
-      document.getElementById('extensionStatus').textContent = 
-        result.extensionEnabled !== false ? 'Active' : 'Disabled';
-      document.getElementById('eventsFound').textContent = 
-        result.eventsFound || 0;
-      document.getElementById('eventsAdded').textContent = 
-        result.eventsAdded || 0;
-
-      // Update toggle button text
-      const toggleBtn = document.getElementById('toggleAutoDetection');
-      toggleBtn.textContent = result.extensionEnabled !== false ? 
-        '⏸️ Disable Auto-Detection' : '▶️ Enable Auto-Detection';
-
-    } catch (error) {
-      console.error('Error loading status:', error);
-    }
-  }
-
-  bindEvents() {
-    document.getElementById('scanCurrentEmail').addEventListener('click', 
-      () => this.scanCurrentEmail());
-    
-    document.getElementById('toggleAutoDetection').addEventListener('click', 
-      () => this.toggleAutoDetection());
-    
-    document.getElementById('openSettings').addEventListener('click', 
-      () => this.openSettings());
-    
-    document.getElementById('viewHelp').addEventListener('click', 
-      () => this.viewHelp());
-    
-    document.getElementById('reportIssue').addEventListener('click', 
-      () => this.reportIssue());
-  }
-
-  async scanCurrentEmail() {
-    try {
-      // Send message to content script to scan current email
+      // Get active tab
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
       
       if (!tab.url.includes('mail.google.com')) {
-        this.showError('Please navigate to Gmail to scan emails');
+        showError('Please navigate to Gmail first');
         return;
       }
 
-      chrome.tabs.sendMessage(tab.id, { action: 'scanCurrentEmail' }, (response) => {
-        if (chrome.runtime.lastError) {
-          this.showError('Could not connect to Gmail. Please refresh the page.');
-          return;
-        }
+      scanButton.textContent = 'Scanning...';
+      scanButton.disabled = true;
 
-        if (response && response.success) {
-          this.showSuccess(`Found ${response.eventsCount} event(s)`);
-          this.updateStatus('eventsFound', response.eventsCount);
-        } else {
-          this.showInfo('No events found in current email');
-        }
+      // Inject content script and scan
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: scanCurrentEmail
       });
-    } catch (error) {
-      this.showError('Error scanning email');
-    }
-  }
 
-  async toggleAutoDetection() {
-    try {
-      const result = await chrome.storage.local.get(['extensionEnabled']);
-      const newStatus = !(result.extensionEnabled !== false);
-      
-      await chrome.storage.local.set({ extensionEnabled: newStatus });
-      
-      // Send message to content script
-      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      if (tab.url.includes('mail.google.com')) {
-        chrome.tabs.sendMessage(tab.id, { 
-          action: 'toggleAutoDetection', 
-          enabled: newStatus 
-        });
+      if (results && results[0] && results[0].result) {
+        const events = results[0].result;
+        updateStats(events.length, 0); // Found events, not yet added
+        showSuccess(`Found ${events.length} events`);
+        
+        // Store events for later use
+        await chrome.storage.local.set({ lastEvents: events });
+      } else {
+        showError('No events found');
       }
 
-      await this.loadStatus();
-      this.showSuccess(`Auto-detection ${newStatus ? 'enabled' : 'disabled'}`);
     } catch (error) {
-      this.showError('Error toggling auto-detection');
+      console.error('Scan failed:', error);
+      showError('Could not connect to Gmail. Please refresh the page.');
+    } finally {
+      scanButton.textContent = 'Scan Current Email';
+      scanButton.disabled = false;
     }
+  });
+
+  function showError(message) {
+    statusElement.textContent = message;
+    statusElement.style.color = '#d93025';
   }
 
-  openSettings() {
-    chrome.runtime.openOptionsPage();
+  function showSuccess(message) {
+    statusElement.textContent = message;
+    statusElement.style.color = '#137333';
   }
 
-  viewHelp() {
-    chrome.tabs.create({ 
-      url: 'https://github.com/your-repo/email2calendar-extension/wiki' 
-    });
+  async function loadStats() {
+    const data = await chrome.storage.local.get(['eventsFound', 'eventsAdded']);
+    eventsFoundElement.textContent = data.eventsFound || 0;
+    eventsAddedElement.textContent = data.eventsAdded || 0;
   }
 
-  reportIssue() {
-    chrome.tabs.create({ 
-      url: 'https://github.com/your-repo/email2calendar-extension/issues' 
-    });
-  }
-
-  async loadRecentEvents() {
-    try {
-      const result = await chrome.storage.local.get(['recentEvents']);
-      const events = result.recentEvents || [];
-      
-      const eventsList = document.getElementById('recentEventsList');
-      eventsList.innerHTML = '';
-
-      if (events.length === 0) {
-        eventsList.innerHTML = '<div class="no-events">No recent events detected</div>';
-        return;
-      }
-
-      events.slice(0, 5).forEach(event => {
-        const eventElement = this.createEventElement(event);
-        eventsList.appendChild(eventElement);
-      });
-    } catch (error) {
-      console.error('Error loading recent events:', error);
-    }
-  }
-
-  createEventElement(event) {
-    const element = document.createElement('div');
-    element.className = 'event-item';
-    element.innerHTML = `
-      <div class="event-title">${event.title}</div>
-      <div class="event-datetime">${event.dateTime}</div>
-      <div class="event-status ${event.status}">${event.status}</div>
-    `;
-    return element;
-  }
-
-  async updateStatus(key, value) {
-    const current = await chrome.storage.local.get([key]);
-    const newValue = (current[key] || 0) + value;
-    await chrome.storage.local.set({ [key]: newValue });
-    document.getElementById(key).textContent = newValue;
-  }
-
-  showSuccess(message) {
-    this.showNotification(message, 'success');
-  }
-
-  showError(message) {
-    this.showNotification(message, 'error');
-  }
-
-  showInfo(message) {
-    this.showNotification(message, 'info');
-  }
-
-  showNotification(message, type) {
-    // Create and show notification in popup
-    const notification = document.createElement('div');
-    notification.className = `popup-notification ${type}`;
-    notification.textContent = message;
+  async function updateStats(found, added) {
+    const data = await chrome.storage.local.get(['eventsFound', 'eventsAdded']);
+    const newFound = (data.eventsFound || 0) + found;
+    const newAdded = (data.eventsAdded || 0) + added;
     
-    document.body.appendChild(notification);
-    setTimeout(() => notification.remove(), 3000);
+    await chrome.storage.local.set({
+      eventsFound: newFound,
+      eventsAdded: newAdded
+    });
+    
+    eventsFoundElement.textContent = newFound;
+    eventsAddedElement.textContent = newAdded;
+  }
+});
+
+// This function runs in the Gmail tab context
+function scanCurrentEmail() {
+  try {
+    // Find the currently open email
+    const emailBody = document.querySelector('[role="main"] [dir="ltr"]') || 
+                     document.querySelector('.ii.gt div') ||
+                     document.querySelector('[data-message-id] [dir="ltr"]');
+    
+    if (!emailBody) {
+      throw new Error('No email content found');
+    }
+
+    const emailText = emailBody.textContent || emailBody.innerText;
+    const subject = document.querySelector('h2')?.textContent || 
+                   document.querySelector('[data-legacy-thread-id] h3')?.textContent || 
+                   'No Subject';
+
+    // Basic event extraction (simplified)
+    const events = extractEventsBasic(emailText, subject);
+    return events;
+
+  } catch (error) {
+    console.error('Email scan error:', error);
+    return [];
   }
 }
 
-// Initialize popup when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  new PopupManager();
-});
+// Basic event extraction without AI
+function extractEventsBasic(text, subject) {
+  const events = [];
+  const sentences = text.split(/[.!?]+/);
+  
+  const eventKeywords = ['meeting', 'meet', 'appointment', 'call', 'lunch', 'dinner', 'event'];
+  const timeKeywords = ['today', 'tomorrow', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'am', 'pm'];
+  
+  sentences.forEach(sentence => {
+    const lowerSentence = sentence.toLowerCase();
+    
+    const hasEvent = eventKeywords.some(keyword => lowerSentence.includes(keyword));
+    const hasTime = timeKeywords.some(keyword => lowerSentence.includes(keyword));
+    
+    if (hasEvent && hasTime) {
+      // Extract basic date/time patterns
+      const dateMatch = sentence.match(/\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i) ||
+                       sentence.match(/\b(today|tomorrow)\b/i) ||
+                       sentence.match(/\b(\d{1,2}\/\d{1,2}\/\d{4})\b/) ||
+                       sentence.match(/\b(\d{1,2}-\d{1,2}-\d{4})\b/);
+      
+      const timeMatch = sentence.match(/\b(\d{1,2}:\d{2}\s*(am|pm))\b/i) ||
+                       sentence.match(/\b(\d{1,2}\s*(am|pm))\b/i);
+      
+      if (dateMatch || timeMatch) {
+        events.push({
+          title: subject || 'Meeting',
+          date: dateMatch ? dateMatch[1] : 'Date TBD',
+          time: timeMatch ? timeMatch[1] : 'Time TBD',
+          description: sentence.trim(),
+          source: 'basic_extraction'
+        });
+      }
+    }
+  });
+  
+  return events;
+}
