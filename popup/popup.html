@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <div class="popup-header">
+      <img src="../assets/icon48.png" alt="Email2Calendar" class="logo">
+      <h1>Email2Calendar</h1>
+    </div>
+    
+    <div class="popup-content">
+      <div class="status-section">
+        <div class="status-item">
+          <span class="status-label">Status:</span>
+          <span id="extensionStatus" class="status-value">Active</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Events Found:</span>
+          <span id="eventsFound" class="status-value">0</span>
+        </div>
+        <div class="status-item">
+          <span class="status-label">Events Added:</span>
+          <span id="eventsAdded" class="status-value">0</span>
+        </div>
+      </div>
+
+      <div class="actions-section">
+        <button id="scanCurrentEmail" class="action-btn primary">
+          📧 Scan Current Email
+        </button>
+        <button id="toggleAutoDetection" class="action-btn">
+          🔄 Toggle Auto-Detection
+        </button>
+        <button id="openSettings" class="action-btn">
+          ⚙️ Settings
+        </button>
+      </div>
+
+      <div class="recent-events">
+        <h3>Recent Detected Events</h3>
+        <div id="recentEventsList" class="events-list">
+          <!-- Dynamically populated -->
+        </div>
+      </div>
+    </div>
+
+    <div class="popup-footer">
+      <a href="#" id="viewHelp">Help</a>
+      <a href="#" id="reportIssue">Report Issue</a>
+    </div>
+  </div>
+  
+  <script src="popup.js"></script>
+</body>
+</html>

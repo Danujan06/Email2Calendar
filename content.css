@@ -1,0 +1,204 @@
+/* Email2Calendar Extension Styles */
+.email2cal-event-button {
+  margin: 10px 0;
+  padding: 12px;
+  background: #f8f9fa;
+  border: 1px solid #e1e3e1;
+  border-radius: 8px;
+  font-family: 'Google Sans', arial, sans-serif;
+}
+
+.email2cal-event-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.email2cal-icon {
+  font-size: 24px;
+}
+
+.email2cal-details {
+  flex: 1;
+}
+
+.email2cal-title {
+  font-weight: 500;
+  color: #202124;
+  margin-bottom: 4px;
+}
+
+.email2cal-datetime {
+  color: #5f6368;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.email2cal-location {
+  color: #5f6368;
+  font-size: 12px;
+}
+
+.email2cal-add-btn {
+  background: #1a73e8;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.email2cal-add-btn:hover {
+  background: #1557b0;
+}
+
+/* Dialog Styles */
+.email2cal-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.email2cal-dialog {
+  background: white;
+  border-radius: 8px;
+  width: 500px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+.email2cal-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #e1e3e1;
+}
+
+.email2cal-dialog-header h3 {
+  margin: 0;
+  color: #202124;
+}
+
+.email2cal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #5f6368;
+}
+
+.email2cal-dialog-body {
+  padding: 20px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+  color: #202124;
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.form-group textarea {
+  height: 80px;
+  resize: vertical;
+}
+
+.email2cal-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px;
+  border-top: 1px solid #e1e3e1;
+}
+
+.email2cal-dialog-footer button {
+  padding: 8px 16px;
+  border: 1px solid #dadce0;
+  border-radius: 4px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.email2cal-dialog-footer button.primary {
+  background: #1a73e8;
+  color: white;
+  border-color: #1a73e8;
+}
+
+/* Notification Styles */
+.email2cal-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 12px 20px;
+  border-radius: 4px;
+  color: white;
+  font-weight: 500;
+  z-index: 10001;
+  animation: slideIn 0.3s ease-out;
+}
+
+.email2cal-notification.success {
+  background: #34a853;
+}
+
+.email2cal-notification.error {
+  background: #ea4335;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* Toggle Button */
+.email2cal-toggle {
+  margin-left: 8px;
+}
+
+.email2cal-toggle button {
+  background: #f8f9fa;
+  border: 1px solid #e1e3e1;
+  border-radius: 4px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #5f6368;
+}
+
+.email2cal-toggle button:hover {
+  background: #e8eaed;
+}

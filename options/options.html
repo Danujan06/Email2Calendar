@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Email2Calendar Settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="settings-container">
+    <div class="settings-header">
+      <h1>Email2Calendar Settings</h1>
+      <p>Configure your email-to-calendar automation preferences</p>
+    </div>
+
+    <div class="settings-content">
+      <section class="settings-section">
+        <h2>🤖 AI Configuration</h2>
+        <div class="setting-group">
+          <label for="aiProvider">AI Provider:</label>
+          <select id="aiProvider">
+            <option value="local">Local Processing Only</option>
+            <option value="openai">OpenAI GPT</option>
+            <option value="anthropic">Anthropic Claude</option>
+            <option value="google">Google Gemini</option>
+          </select>
+        </div>
+
+        <div class="setting-group" id="apiKeyGroup" style="display: none;">
+          <label for="apiKey">API Key:</label>
+          <input type="password" id="apiKey" placeholder="Enter your API key">
+          <small>Your API key is stored securely and only used for event extraction</small>
+        </div>
+
+        <div class="setting-group">
+          <label for="confidenceThreshold">Confidence Threshold:</label>
+          <input type="range" id="confidenceThreshold" min="0.1" max="1.0" step="0.1" value="0.7">
+          <span id="confidenceValue">0.7</span>
+          <small>Minimum confidence level required to suggest an event</small>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h2>📅 Calendar Settings</h2>
+        <div class="setting-group">
+          <label for="defaultCalendar">Default Calendar:</label>
+          <select id="defaultCalendar">
+            <option value="primary">Primary Calendar</option>
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+
+        <div class="setting-group">
+          <label for="defaultDuration">Default Event Duration (minutes):</label>
+          <input type="number" id="defaultDuration" value="60" min="15" max="480" step="15">
+        </div>
+
+        <div class="setting-group">
+          <label>
+            <input type="checkbox" id="addAsPrivate">
+            Mark extracted events as private by default
+          </label>
+        </div>
+
+        <div class="setting-group">
+          <label>
+            <input type="checkbox" id="requireConfirmation" checked>
+            Require confirmation before adding events
+          </label>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h2>🔍 Detection Settings</h2>
+        <div class="setting-group">
+          <label>
+            <input type="checkbox" id="autoDetection" checked>
+            Enable automatic event detection
+          </label>
+        </div>
+
+        <div class="setting-group">
+          <label for="emailFilters">Email Filters:</label>
+          <textarea id="emailFilters" placeholder="meeting&#10;appointment&#10;call&#10;lunch&#10;dinner" rows="4"></textarea>
+          <small>Keywords that indicate an email might contain events (one per line)</small>
+        </div>
+
+        <div class="setting-group">
+          <label for="excludePatterns">Exclude Patterns:</label>
+          <textarea id="excludePatterns" placeholder="newsletter&#10;unsubscribe&#10;automated" rows="3"></textarea>
+          <small>Patterns to exclude from event detection (one per line)</small>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h2>🔔 Notifications</h2>
+        <div class="setting-group">
+          <label>
+            <input type="checkbox" id="showNotifications" checked>
+            Show notifications when events are detected
+          </label>
+        </div>
+
+        <div class="setting-group">
+          <label>
+            <input type="checkbox" id="soundEnabled">
+            Play sound for notifications
+          </label>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h2>🔒 Privacy & Security</h2>
+        <div class="setting-group">
+          <label>
+            <input type="checkbox" id="localProcessing" checked>
+            Process emails locally when possible
+          </label>
+          <small>Reduces data sent to external services</small>
+        </div>
+
+        <div class="setting-group">
+          <label>
+            <input type="checkbox" id="logActivity">
+            Log activity for debugging
+          </label>
+          <small>Helps troubleshoot issues (logs stored locally)</small>
+        </div>
+
+        <div class="setting-group">
+          <button id="clearData" class="secondary-btn">Clear All Stored Data</button>
+          <small>Remove all settings, logs, and cached data</small>
+        </div>
+      </section>
+    </div>
+
+    <div class="settings-footer">
+      <button id="saveSettings" class="primary-btn">Save Settings</button>
+      <button id="resetSettings" class="secondary-btn">Reset to Defaults</button>
+      <div class="save-status" id="saveStatus"></div>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
