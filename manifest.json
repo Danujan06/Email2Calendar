@@ -4,6 +4,7 @@
   "version": "1.0",
   "description": "Automatically extract calendar events from Gmail using AI",
   "permissions": [
+    "scripting",
     "storage",
     "activeTab",
     "identity"
