@@ -882,3 +882,9 @@ if (document.readyState === 'loading') {
 } else {
   addDebugButtons();
 }
+
+chrome.identity.clearAllCachedAuthTokens().then(() => {
+  chrome.identity.getAuthToken({interactive: true}, (token) => {
+    console.log('Desktop OAuth result:', token);
+  });
+});
