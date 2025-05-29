@@ -3,6 +3,12 @@
   "name": "Email2Calendar",
   "version": "1.0",
   "description": "Automatically extract calendar events from Gmail using AI",
+  "icons": {
+    "16": "assets/icons/App_logo_1.png",
+    "32": "assets/icons/App_logo_1.png",
+    "48": "assets/icons/App_logo_1.png",
+    "128": "assets/icons/App_logo_1.png"
+  },
   "permissions": [
     "scripting",
     "storage",
