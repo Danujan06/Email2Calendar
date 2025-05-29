@@ -159,6 +159,181 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // This function runs in the Gmail tab context
 function scanCurrentEmail() {
+  // Define extractEventsBasic inside scanCurrentEmail so it's available in the injected context
+  function extractEventsBasic(text, subject) {
+    const events = [];
+    
+    // Split text into lines for better parsing
+    const lines = text.split(/[\n\r]+/);
+    const fullText = text.toLowerCase();
+    
+    // Extended event keywords including academic terms
+    const eventKeywords = [
+      'meeting', 'meet', 'appointment', 'call', 'lunch', 'dinner', 'event', 
+      'conference', 'workshop', 'webinar', 'due', 'deadline', 'assignment', 
+      'exam', 'test', 'quiz', 'submission', 'submit', 'presentation', 'demo',
+      'interview', 'class', 'lecture', 'seminar', 'tutorial', 'lab'
+    ];
+    
+    // Date patterns
+    const datePatterns = [
+      // Day names
+      /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s*(\d{1,2})\s*(january|february|march|april|may|june|july|august|september|october|november|december)\s*(\d{4})?\b/i,
+      // Month day, year
+      /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2}),?\s*(\d{4})?\b/i,
+      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+(\d{1,2}),?\s*(\d{4})?\b/i,
+      // Numeric dates
+      /\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})\b/,
+      // Relative dates
+      /\b(today|tomorrow|yesterday)\b/i,
+      /\b(next|this)\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+      // Due dates
+      /\bdue:?\s*(.+?)(?:\.|,|$)/i,
+      /\bdeadline:?\s*(.+?)(?:\.|,|$)/i
+    ];
+    
+    // Time patterns
+    const timePatterns = [
+      /\b(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)\b/,
+      /\b(\d{1,2})\s*(am|pm|AM|PM)\b/,
+      /\b(\d{1,2}):(\d{2})\b/,
+      /\b(noon|midnight)\b/i
+    ];
+
+    // Process each line
+    lines.forEach((line, index) => {
+      const lowerLine = line.toLowerCase();
+      
+      // Check if this line or nearby lines contain event keywords
+      const hasEventKeyword = eventKeywords.some(keyword => lowerLine.includes(keyword));
+      
+      if (hasEventKeyword || lowerLine.includes('due') || lowerLine.includes('deadline')) {
+        let eventDate = null;
+        let eventTime = null;
+        let eventTitle = null;
+        
+        // Look for dates in current line and next few lines
+        const searchText = lines.slice(index, index + 3).join(' ');
+        
+        // Try each date pattern
+        for (const pattern of datePatterns) {
+          const match = searchText.match(pattern);
+          if (match) {
+            eventDate = match[0];
+            break;
+          }
+        }
+        
+        // Try each time pattern
+        for (const pattern of timePatterns) {
+          const match = searchText.match(pattern);
+          if (match) {
+            eventTime = match[0];
+            break;
+          }
+        }
+        
+        // Extract title based on context
+        if (line.includes('assignment') || line.includes('Assignment')) {
+          // For assignments, extract the course/assignment name
+          const assignmentMatch = line.match(/\*\*(.+?)\*\*/) || 
+                                 line.match(/\b([A-Z]{2,4}\d{3}[A-Za-z0-9\s\-:]+)/);
+          if (assignmentMatch) {
+            eventTitle = assignmentMatch[1].trim();
+          }
+        } else if (line.includes('due') || line.includes('deadline')) {
+          // For due dates, extract what's due
+          const dueMatch = line.match(/(.+?)\s+(?:is\s+)?due/i) ||
+                          line.match(/due:?\s*(.+)/i);
+          if (dueMatch) {
+            eventTitle = dueMatch[1].trim();
+          }
+        } else {
+          // For other events, use subject or extract from line
+          eventTitle = subject || line.substring(0, 50).trim();
+        }
+        
+        // If we found a date, create an event
+        if (eventDate || eventTime) {
+          events.push({
+            title: eventTitle || subject || 'Event',
+            date: eventDate || 'Date TBD',
+            time: eventTime || 'Time TBD',
+            description: line.trim(),
+            source: 'basic_extraction',
+            type: hasEventKeyword ? 'event' : 'deadline'
+          });
+        }
+      }
+    });
+    
+    // Also check for specific patterns in the full text
+    // Pattern for "assignments are due on [date]"
+    const dueDateMatch = fullText.match(/(?:assignments?|tasks?|homework|projects?)\s+(?:are\s+)?due\s+on\s+([^.]+)/i);
+    if (dueDateMatch) {
+      const dueDateText = dueDateMatch[1];
+      let eventDate = null;
+      let eventTime = null;
+      
+      // Extract date from the due date text
+      for (const pattern of datePatterns) {
+        const match = dueDateText.match(pattern);
+        if (match) {
+          eventDate = match[0];
+          break;
+        }
+      }
+      
+      // Extract time
+      for (const pattern of timePatterns) {
+        const match = dueDateText.match(pattern);
+        if (match) {
+          eventTime = match[0];
+          break;
+        }
+      }
+      
+      if (eventDate) {
+        // Look for specific assignment details
+        const assignmentMatches = text.match(/\*\s*\*\*(.+?)\*\*/g) || [];
+        
+        if (assignmentMatches.length > 0) {
+          assignmentMatches.forEach(match => {
+            const title = match.replace(/\*\s*\*\*(.+?)\*\*/, '$1').trim();
+            events.push({
+              title: title,
+              date: eventDate,
+              time: eventTime || 'Time TBD',
+              description: `Assignment due: ${title}`,
+              source: 'basic_extraction',
+              type: 'deadline'
+            });
+          });
+        } else {
+          events.push({
+            title: 'Assignment Due',
+            date: eventDate,
+            time: eventTime || 'Time TBD',
+            description: dueDateMatch[0],
+            source: 'basic_extraction',
+            type: 'deadline'
+          });
+        }
+      }
+    }
+    
+    // Remove duplicates
+    const uniqueEvents = events.filter((event, index, self) =>
+      index === self.findIndex(e => 
+        e.title === event.title && 
+        e.date === event.date && 
+        e.time === event.time
+      )
+    );
+    
+    return uniqueEvents;
+  }
+
   try {
     // Find the currently open email
     const emailBody = document.querySelector('[role="main"] [dir="ltr"]') || 
