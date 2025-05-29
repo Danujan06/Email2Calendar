@@ -534,3 +534,181 @@ function extractEventsBasic(text, subject) {
   
   return uniqueEvents;
 }
+
+// Add this debug function to your popup.js for testing
+async function debugCalendarIntegration() {
+  console.log('🔍 Starting Calendar Integration Debug...');
+  
+  try {
+    // Step 1: Test Extension Permissions
+    console.log('📋 Checking permissions...');
+    const permissions = await chrome.permissions.getAll();
+    console.log('Available permissions:', permissions);
+    
+    // Step 2: Test OAuth Authentication
+    console.log('🔐 Testing authentication...');
+    const result = await chrome.identity.getAuthToken({ 
+      interactive: true,
+      scopes: [
+        'https://www.googleapis.com/auth/calendar',
+        'https://www.googleapis.com/auth/gmail.readonly'
+      ]
+    });
+    
+    const token = result.token || result;
+    console.log('✅ Authentication successful:', token ? 'Token received' : 'No token');
+    
+    // Step 3: Test Calendar API Access
+    console.log('📅 Testing Calendar API access...');
+    const calendarResponse = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList', {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    console.log('Calendar API response status:', calendarResponse.status);
+    
+    if (calendarResponse.ok) {
+      const calendars = await calendarResponse.json();
+      console.log('✅ Calendar access successful. Available calendars:', calendars.items.length);
+      console.log('Primary calendar:', calendars.items.find(cal => cal.primary));
+    } else {
+      const error = await calendarResponse.text();
+      console.error('❌ Calendar API error:', error);
+      return false;
+    }
+    
+    // Step 4: Test Event Creation
+    console.log('📝 Testing event creation...');
+    const testEvent = {
+      summary: 'Test Event from Extension',
+      description: 'This is a test event created by Email2Calendar extension',
+      start: {
+        dateTime: new Date(Date.now() + 3600000).toISOString(), // 1 hour from now
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      },
+      end: {
+        dateTime: new Date(Date.now() + 7200000).toISOString(), // 2 hours from now
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      }
+    };
+    
+    const createResponse = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(testEvent)
+    });
+    
+    console.log('Event creation response status:', createResponse.status);
+    
+    if (createResponse.ok) {
+      const createdEvent = await createResponse.json();
+      console.log('✅ Event created successfully!');
+      console.log('Event ID:', createdEvent.id);
+      console.log('Event link:', createdEvent.htmlLink);
+      
+      // Clean up - delete the test event
+      setTimeout(async () => {
+        await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${createdEvent.id}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        console.log('🗑️ Test event cleaned up');
+      }, 5000);
+      
+      return true;
+    } else {
+      const error = await createResponse.json();
+      console.error('❌ Event creation failed:', error);
+      return false;
+    }
+    
+  } catch (error) {
+    console.error('❌ Debug failed:', error);
+    return false;
+  }
+}
+
+// Add this to test message passing
+async function testMessagePassing() {
+  console.log('📨 Testing message passing to background script...');
+  
+  const testEventData = {
+    title: 'Test Meeting',
+    date: '2025-05-30',
+    startTime: '14:00',
+    endTime: '15:00',
+    description: 'Test event from popup'
+  };
+  
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({
+      action: 'addToCalendar',
+      event: testEventData
+    }, (response) => {
+      console.log('Background script response:', response);
+      if (response) {
+        if (response.success) {
+          console.log('✅ Event added via background script!');
+          console.log('Event ID:', response.eventId);
+        } else {
+          console.error('❌ Background script error:', response.error);
+        }
+      } else {
+        console.error('❌ No response from background script');
+      }
+      resolve(response);
+    });
+  });
+}
+
+// Add debug buttons to popup
+function addDebugButtons() {
+  const debugSection = document.createElement('div');
+  debugSection.innerHTML = `
+    <div style="margin-top: 16px; padding: 16px; background: #fff3cd; border-radius: 8px;">
+      <h4>Debug Tools</h4>
+      <button id="debugAuth" style="margin: 4px; padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">Test Auth</button>
+      <button id="debugCalendar" style="margin: 4px; padding: 8px 12px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">Test Calendar</button>
+      <button id="debugMessage" style="margin: 4px; padding: 8px 12px; background: #ffc107; color: black; border: none; border-radius: 4px; cursor: pointer;">Test Messages</button>
+    </div>
+  `;
+  
+  document.querySelector('.popup-content').appendChild(debugSection);
+  
+  document.getElementById('debugAuth').onclick = async () => {
+    console.clear();
+    console.log('🔍 Testing Authentication Only...');
+    try {
+      const result = await chrome.identity.getAuthToken({ interactive: true });
+      console.log('Auth result:', result);
+      alert('Check console for auth results');
+    } catch (error) {
+      console.error('Auth error:', error);
+      alert('Auth failed: ' + error.message);
+    }
+  };
+  
+  document.getElementById('debugCalendar').onclick = async () => {
+    console.clear();
+    const success = await debugCalendarIntegration();
+    alert(success ? 'Calendar test passed! Check console.' : 'Calendar test failed. Check console.');
+  };
+  
+  document.getElementById('debugMessage').onclick = async () => {
+    console.clear();
+    const result = await testMessagePassing();
+    alert(result ? 'Message test passed!' : 'Message test failed. Check console.');
+  };
+}
+
+// Call this when popup loads
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', addDebugButtons);
+} else {
+  addDebugButtons();
+}
