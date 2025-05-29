@@ -1,9 +1,11 @@
 // popup.js
+// Enhanced popup.js with direct event addition capability
 document.addEventListener('DOMContentLoaded', function() {
   const scanButton = document.getElementById('scanCurrentEmail');
   const statusElement = document.getElementById('extensionStatus');
   const eventsFoundElement = document.getElementById('eventsFound');
   const eventsAddedElement = document.getElementById('eventsAdded');
+  let lastDetectedEvents = [];
 
   // Load saved stats
   loadStats();
@@ -30,16 +32,19 @@ document.addEventListener('DOMContentLoaded', function() {
 
       if (results && results[0] && results[0].result) {
         const events = results[0].result;
-        updateStats(events.length, 0); // Found events, not yet added
+        lastDetectedEvents = events; // Store for adding to calendar
+        
+        updateStats(events.length, 0);
         showSuccess(`Found ${events.length} events`);
         
         // Store events for later use
         await chrome.storage.local.set({ lastEvents: events });
         
-        // Update recent events list
-        await updateRecentEvents(events);
+        // Update recent events list with add buttons
+        await updateRecentEventsWithActions(events);
       } else {
         showError('No events found');
+        lastDetectedEvents = [];
       }
 
     } catch (error) {
@@ -51,6 +56,205 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
+  // Add function to add events directly from popup
+  async function addEventToCalendar(eventData, button) {
+    try {
+      button.textContent = 'Adding...';
+      button.disabled = true;
+
+      // Format event data for calendar API
+      const formattedEvent = formatEventForCalendar(eventData);
+      
+      // Send to background script
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          action: 'addToCalendar',
+          event: formattedEvent
+        }, resolve);
+      });
+
+      if (response && response.success) {
+        showSuccess('Event added to calendar!');
+        button.textContent = '✅ Added';
+        button.style.background = '#28a745';
+        
+        // Update stats
+        const data = await chrome.storage.local.get(['eventsAdded']);
+        const newAdded = (data.eventsAdded || 0) + 1;
+        await chrome.storage.local.set({ eventsAdded: newAdded });
+        eventsAddedElement.textContent = newAdded;
+        
+        // Update event status in storage
+        updateEventStatus(eventData, 'added');
+        
+      } else {
+        throw new Error(response?.error || 'Unknown error');
+      }
+      
+    } catch (error) {
+      console.error('Failed to add event:', error);
+      showError('Failed to add event: ' + error.message);
+      button.textContent = '❌ Failed';
+      button.style.background = '#dc3545';
+    }
+  }
+
+  function formatEventForCalendar(eventData) {
+    // Convert detected event format to calendar API format
+    return {
+      title: eventData.title || 'Event',
+      date: formatDate(eventData.date),
+      startTime: formatTime(eventData.time),
+      endTime: addOneHour(formatTime(eventData.time)),
+      description: eventData.description || '',
+      location: eventData.location || null
+    };
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr || dateStr === 'Date TBD') return getTomorrowDate();
+    
+    // Handle various date formats
+    if (dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        const month = parts[0].padStart(2, '0');
+        const day = parts[1].padStart(2, '0');
+        const year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+        return `${year}-${month}-${day}`;
+      }
+    }
+    
+    // Handle relative dates
+    if (dateStr.toLowerCase().includes('today')) {
+      return new Date().toISOString().split('T')[0];
+    }
+    
+    if (dateStr.toLowerCase().includes('tomorrow')) {
+      return getTomorrowDate();
+    }
+    
+    // Try to parse as-is
+    try {
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        return date.toISOString().split('T')[0];
+      }
+    } catch (e) {}
+    
+    // Default to tomorrow
+    return getTomorrowDate();
+  }
+
+  function formatTime(timeStr) {
+    if (!timeStr || timeStr === 'Time TBD') return null;
+    
+    // Handle various time formats
+    const timeMatch = timeStr.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
+    if (timeMatch) {
+      let hours = parseInt(timeMatch[1]);
+      const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+      const ampm = timeMatch[3]?.toLowerCase();
+      
+      if (ampm === 'pm' && hours !== 12) hours += 12;
+      if (ampm === 'am' && hours === 12) hours = 0;
+      
+      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    }
+    
+    return null;
+  }
+
+  function addOneHour(timeStr) {
+    if (!timeStr) return null;
+    
+    try {
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      const newHours = (hours + 1) % 24;
+      return `${newHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    } catch (e) {
+      return timeStr;
+    }
+  }
+
+  function getTomorrowDate() {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().split('T')[0];
+  }
+
+  async function updateEventStatus(eventData, status) {
+    const result = await chrome.storage.local.get(['recentEvents']);
+    let recentEvents = result.recentEvents || [];
+    
+    // Find and update the event
+    const eventIndex = recentEvents.findIndex(e => 
+      e.title === eventData.title && e.date === eventData.date
+    );
+    
+    if (eventIndex !== -1) {
+      recentEvents[eventIndex].status = status;
+      await chrome.storage.local.set({ recentEvents });
+    }
+  }
+
+  async function updateRecentEventsWithActions(newEvents) {
+    const result = await chrome.storage.local.get(['recentEvents']);
+    let recentEvents = result.recentEvents || [];
+    
+    // Add new events to the beginning
+    newEvents.forEach(event => {
+      event.timestamp = new Date().toISOString();
+      event.status = 'detected';
+    });
+    
+    recentEvents = [...newEvents, ...recentEvents].slice(0, 10);
+    await chrome.storage.local.set({ recentEvents });
+    
+    // Display with action buttons
+    displayEventsWithActions(newEvents);
+  }
+
+  function displayEventsWithActions(events) {
+    const eventsList = document.getElementById('recentEventsList');
+    
+    if (events.length === 0) {
+      eventsList.innerHTML = '<div class="no-events">No recent events detected</div>';
+      return;
+    }
+
+    eventsList.innerHTML = events.map((event, index) => `
+      <div class="event-item" data-event-index="${index}">
+        <div class="event-details">
+          <div class="event-title">${event.title}</div>
+          <div class="event-datetime">${event.date} ${event.time || ''}</div>
+          <div class="event-description" style="font-size: 11px; color: #666; margin-top: 2px;">
+            ${event.description ? event.description.substring(0, 60) + '...' : ''}
+          </div>
+        </div>
+        <div class="event-actions">
+          <button class="add-event-btn" data-event-index="${index}" 
+                  style="padding: 4px 8px; font-size: 11px; background: #1a73e8; color: white; border: none; border-radius: 3px; cursor: pointer;">
+            📅 Add
+          </button>
+        </div>
+        <span class="event-status ${event.status || 'detected'}">${event.status || 'detected'}</span>
+      </div>
+    `).join('');
+
+    // Add event listeners for the add buttons
+    eventsList.querySelectorAll('.add-event-btn').forEach(button => {
+      button.addEventListener('click', async (e) => {
+        const eventIndex = parseInt(e.target.dataset.eventIndex);
+        const event = events[eventIndex];
+        if (event) {
+          await addEventToCalendar(event, button);
+        }
+      });
+    });
+  }
+
+  // Rest of the existing functions...
   function showError(message) {
     showNotification(message, 'error');
     statusElement.textContent = 'Error';
@@ -64,7 +268,6 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function showNotification(message, type) {
-    // Remove any existing notification
     const existing = document.querySelector('.popup-notification');
     if (existing) existing.remove();
 
@@ -73,9 +276,7 @@ document.addEventListener('DOMContentLoaded', function() {
     notification.textContent = message;
     document.body.appendChild(notification);
 
-    setTimeout(() => {
-      notification.remove();
-    }, 3000);
+    setTimeout(() => notification.remove(), 3000);
   }
 
   async function loadStats() {
@@ -106,37 +307,14 @@ document.addEventListener('DOMContentLoaded', function() {
     if (recentEvents.length === 0) {
       eventsList.innerHTML = '<div class="no-events">No recent events detected</div>';
     } else {
-      eventsList.innerHTML = recentEvents.slice(0, 5).map(event => `
-        <div class="event-item">
-          <div class="event-title">${event.title}</div>
-          <div class="event-datetime">${event.date} ${event.time || ''}</div>
-          <span class="event-status ${event.status || 'detected'}">${event.status || 'detected'}</span>
-        </div>
-      `).join('');
+      displayEventsWithActions(recentEvents.slice(0, 5));
     }
   }
 
-  async function updateRecentEvents(newEvents) {
-    const result = await chrome.storage.local.get(['recentEvents']);
-    let recentEvents = result.recentEvents || [];
-    
-    // Add new events to the beginning
-    newEvents.forEach(event => {
-      event.timestamp = new Date().toISOString();
-      event.status = 'detected';
-    });
-    
-    recentEvents = [...newEvents, ...recentEvents].slice(0, 10); // Keep last 10
-    await chrome.storage.local.set({ recentEvents });
-    
-    // Reload the display
-    loadRecentEvents();
-  }
-
-  // Add other button event listeners
+  // Existing button handlers...
   document.getElementById('toggleAutoDetection').addEventListener('click', async () => {
     const result = await chrome.storage.sync.get(['autoDetection']);
-    const currentState = result.autoDetection !== false; // Default true
+    const currentState = result.autoDetection !== false;
     const newState = !currentState;
     await chrome.storage.sync.set({ autoDetection: newState });
     showSuccess(`Auto-detection ${newState ? 'enabled' : 'disabled'}`);
@@ -145,17 +323,9 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('openSettings').addEventListener('click', () => {
     chrome.runtime.openOptionsPage();
   });
-
-  document.getElementById('viewHelp').addEventListener('click', (e) => {
-    e.preventDefault();
-    chrome.tabs.create({ url: 'https://github.com/yourusername/email2calendar#readme' });
-  });
-
-  document.getElementById('reportIssue').addEventListener('click', (e) => {
-    e.preventDefault();
-    chrome.tabs.create({ url: 'https://github.com/yourusername/email2calendar/issues' });
-  });
 });
+
+// The scanCurrentEmail function remains the same as in your existing code...
 
 // This function runs in the Gmail tab context
 function scanCurrentEmail() {
