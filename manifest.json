@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Email2Calendar",
+  "name": "Schedly",
   "version": "1.0",
   "description": "Automatically extract calendar events from Gmail using AI",
   "icons": {
@@ -35,7 +35,7 @@
   },
   "options_page": "options/options.html",
   "oauth2": {
-    "client_id": "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",
+    "client_id": "223116250257-gc6gnbjt6ocdaieubhe4h54tdmoak0pr.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/calendar",
       "https://www.googleapis.com/auth/gmail.readonly"
