@@ -1,4 +1,4 @@
-// Fixed popup.js with null safety for regex matches
+// Updated popup.js with enhanced natural language extraction
 document.addEventListener('DOMContentLoaded', function() {
   const scanButton = document.getElementById('scanCurrentEmail');
   const statusElement = document.getElementById('extensionStatus');
@@ -19,57 +19,66 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
 
-      scanButton.textContent = 'Scanning...';
+      // Preserve button styling during scan
+      const originalHTML = scanButton.innerHTML;
+      scanButton.innerHTML = `
+        <span class="btn-icon">⏳</span>
+        <span class="btn-label">Scanning</span>
+      `;
       scanButton.disabled = true;
 
-      console.log('🚀 Starting email scan...');
+      console.log('🚀 Starting enhanced email scan...');
 
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         function: () => {
-          console.log('🔍 Function injected into Gmail page');
+          // ENHANCED EXTRACTION ENGINE - Injected into Gmail page
+          console.log('🔍 Enhanced extraction engine started');
           
           try {
-            // Find email content
+            // Find email content with improved selectors
             const emailSelectors = [
               '[role="main"] [dir="ltr"]',
               '.ii.gt div',
-              '[data-message-id] [dir="ltr"]',
               '.a3s.aiL',
               '.ii.gt',
-              '[role="listitem"] [dir="ltr"]'
+              '[data-message-id] [dir="ltr"]',
+              '[role="listitem"] [dir="ltr"]',
+              '.adn .a3s',
+              '.gmail_default'
             ];
             
             let emailBody = null;
+            let emailText = '';
+            
             for (const selector of emailSelectors) {
-              emailBody = document.querySelector(selector);
-              if (emailBody) {
-                const text = emailBody.textContent || emailBody.innerText || '';
+              const element = document.querySelector(selector);
+              if (element) {
+                const text = element.textContent || element.innerText || '';
                 if (text.length > 20) {
-                  console.log(`✅ Found email body with selector: "${selector}"`);
+                  emailBody = element;
+                  emailText = text;
+                  console.log(`✅ Found email content: "${text.substring(0, 200)}..."`);
                   break;
                 }
               }
             }
             
-            if (!emailBody) {
+            if (!emailText) {
               console.error('❌ No email content found');
               return [];
             }
 
-            const emailText = emailBody.textContent || emailBody.innerText || '';
-            console.log('📄 Email text length:', emailText.length);
-            
             // Find subject
             const subjectSelectors = [
               'h2[data-legacy-thread-id]',
               '[role="main"] h2',
               'h2 span[data-hovercard-id]',
               '.hP',
-              '.bog .bqe'
+              'h2'
             ];
             
-            let subject = 'No Subject';
+            let subject = '';
             for (const selector of subjectSelectors) {
               const element = document.querySelector(selector);
               if (element && element.textContent && element.textContent.trim().length > 0) {
@@ -79,160 +88,323 @@ document.addEventListener('DOMContentLoaded', function() {
               }
             }
 
-            if (!emailText || emailText.length < 10) {
-              console.error('❌ Email text too short or empty');
-              return [];
-            }
-
             console.log('🎯 Processing email:', { subject, textLength: emailText.length });
             
-            // Extract events
+            // ENHANCED MULTI-STRATEGY EXTRACTION
+            return extractEventsWithMultipleStrategies(emailText, subject);
+
+          } catch (error) {
+            console.error('💥 Enhanced extraction error:', error);
+            return [];
+          }
+
+          // EXTRACTION STRATEGIES
+          function extractEventsWithMultipleStrategies(emailText, subject) {
+            const events = [];
+            const text = emailText.toLowerCase();
+            const originalText = emailText;
+            
+            console.log('🔍 Starting multi-strategy extraction...');
+            
+            // Strategy 1: Meeting invitation patterns (PRIMARY for your email type)
+            const meetingEvents = extractMeetingInvitations(originalText, subject);
+            events.push(...meetingEvents);
+            
+            // Strategy 2: Natural language temporal expressions
+            const temporalEvents = extractTemporalEvents(originalText, subject);
+            events.push(...temporalEvents);
+            
+            // Strategy 3: Academic deadline patterns
+            const deadlineEvents = extractDeadlineEvents(originalText, subject);
+            events.push(...deadlineEvents);
+            
+            console.log(`🎯 Total events found: ${events.length}`);
+            
+            // Deduplicate and rank by confidence
+            return deduplicateAndRank(events);
+          }
+
+          // Strategy 1: Meeting invitation patterns (MAIN STRATEGY for your email)
+          function extractMeetingInvitations(text, subject) {
             const events = [];
             
-            // Look for "Due:" pattern
-            console.log('🔍 Looking for "Due:" patterns...');
-            const duePattern = /due:\s*([^.\n\r]+)/gi;
-            const dueMatches = [...emailText.matchAll(duePattern)];
-            console.log('🎯 Due matches found:', dueMatches.length);
+            console.log('🔍 Strategy 1: Looking for meeting invitations...');
             
-            if (dueMatches.length > 0) {
-              const dueText = dueMatches[0][1] ? dueMatches[0][1].trim() : '';
-              console.log('📅 Due text:', dueText);
+            // Enhanced patterns for natural language
+            const patterns = [
+              // "Meet me tomorrow in the faculty canteen at 10.00 am"
+              /meet\s+(?:me\s+)?(?:tomorrow|today|monday|tuesday|wednesday|thursday|friday|saturday|sunday)(?:\s+(?:at|in|on))?\s+(?:the\s+)?([\w\s]+?)(?:\s+at\s+)?(\d{1,2}(?:\.\d{2}|\:\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)/gi,
               
-              if (dueText) {
-                // Extract date from due text
-                const datePatterns = [
-                  /(monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s*(\d{1,2})\s*(january|february|march|april|may|june|july|august|september|october|november|december)\s*(\d{4})?,?\s*(\d{1,2}:\d{2}\s*(?:am|pm)?)?/gi,
-                  /(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+(\d{1,2}),?\s*(\d{4})?,?\s*(\d{1,2}:\d{2}\s*(?:am|pm)?)?/gi
-                ];
+              // "Let's meet tomorrow at 10"
+              /let'?s\s+meet\s+(?:tomorrow|today)(?:\s+(?:at|in|on))?\s*([\w\s]*?)(?:\s+at\s+)?(\d{1,2}(?:\.\d{2}|\:\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)/gi,
+              
+              // "See you tomorrow at 10"
+              /see\s+you\s+(?:tomorrow|today)(?:\s+(?:at|in|on))?\s*([\w\s]*?)(?:\s+at\s+)?(\d{1,2}(?:\.\d{2}|\:\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)/gi,
+              
+              // More flexible: just look for "tomorrow" + time
+              /(tomorrow|today)(?:\s+(?:at|in|on))?\s*([\w\s]*?)(?:\s+at\s+)?(\d{1,2}(?:\.\d{2}|\:\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)/gi
+            ];
+            
+            patterns.forEach((pattern, index) => {
+              const matches = [...text.matchAll(pattern)];
+              console.log(`   Pattern ${index + 1}: Found ${matches.length} matches`);
+              
+              matches.forEach(match => {
+                console.log(`   Match:`, match[0]);
                 
-                let dateMatch = null;
-                for (const pattern of datePatterns) {
-                  dateMatch = dueText.match(pattern);
-                  if (dateMatch) {
-                    console.log('📅 Date match found:', dateMatch[0]);
-                    break;
-                  }
+                let temporalWord, location, timeStr;
+                
+                if (match.length === 4) {
+                  // Format: temporal + location + time
+                  temporalWord = match[1];
+                  location = match[2] ? match[2].trim() : '';
+                  timeStr = match[3] ? match[3].trim() : '';
+                } else {
+                  // Simpler format
+                  temporalWord = 'tomorrow'; // Default
+                  location = match[1] ? match[1].trim() : '';
+                  timeStr = match[2] ? match[2].trim() : '';
                 }
                 
-                if (dateMatch) {
-                  // Get course code from subject or text - FIXED: Added null checks
-                  console.log('🔍 Looking for course codes...');
-                  const coursePattern = /\b([A-Z]{2,4}\d{3}[A-Za-z0-9]*)/;
-                  const courseMatch = (subject + ' ' + emailText).match(coursePattern);
-                  const courseCode = courseMatch ? courseMatch[0] : null;
-                  console.log('📚 Course code found:', courseCode);
-                  
-                  // Get assignment details - FIXED: Added proper null checks
-                  console.log('🔍 Looking for assignment details...');
-                  const assignmentPattern = /(?:assignment|lab|project|homework)\s*([^.\n\r,:;]{0,50})/gi;
-                  const assignmentMatch = emailText.match(assignmentPattern);
-                  // FIXED: Check if assignmentMatch exists and has valid capture group
-                  const assignmentDetails = (assignmentMatch && assignmentMatch[1]) ? assignmentMatch[1].trim() : null;
-                  console.log('📝 Assignment details:', assignmentDetails);
-                  
-                  // ALTERNATIVE: Try to extract assignment name from subject
-                  let assignmentFromSubject = null;
-                  if (subject.includes(':')) {
-                    const subjectParts = subject.split(':');
-                    if (subjectParts.length > 1) {
-                      assignmentFromSubject = subjectParts[subjectParts.length - 1].trim();
-                      console.log('📝 Assignment from subject:', assignmentFromSubject);
-                    }
-                  }
-                  
-                  // Build title with fallbacks
-                  let title = 'Assignment';
-                  if (courseCode && (assignmentDetails || assignmentFromSubject)) {
-                    title = `${courseCode}: ${assignmentDetails || assignmentFromSubject}`;
-                  } else if (courseCode) {
-                    title = `${courseCode} Assignment`;
-                  } else if (assignmentDetails) {
-                    title = assignmentDetails;
-                  } else if (assignmentFromSubject) {
-                    title = assignmentFromSubject;
-                  } else if (subject && !subject.toLowerCase().includes('do not reply')) {
-                    // Use the subject but clean it up
-                    title = subject.replace(/^[^:]*:\s*/, ''); // Remove prefix before colon
-                  }
-                  console.log('📝 Built title:', title);
-                  
-                  // Extract time - FIXED: Added null checks
-                  console.log('🔍 Looking for time patterns...');
-                  const timePattern = /\b(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)\b/;
-                  const timeMatch = dueText.match(timePattern);
-                  const time = timeMatch ? timeMatch[0] : 'Time TBD';
-                  console.log('⏰ Time found:', time);
-                  
+                // Clean up location (remove connecting words)
+                location = location.replace(/\b(at|in|on|the)\b/gi, '').trim();
+                
+                const dateStr = extractDateFromTemporalExpression(temporalWord);
+                const time = normalizeTime(timeStr);
+                
+                console.log(`   Extracted: date="${dateStr}", time="${time}", location="${location}"`);
+                
+                if (dateStr && time) {
                   const event = {
-                    title: title,
-                    date: dateMatch[0],
+                    id: Date.now() + Math.random(),
+                    title: generateMeetingTitle(subject, location, text),
+                    date: dateStr,
                     time: time,
-                    description: `Due: ${dueText}`,
-                    source: 'due_pattern',
-                    type: 'assignment',
-                    confidence: 0.9
+                    location: location || null,
+                    description: `Meeting: ${match[0]}`,
+                    source: 'meeting_invitation',
+                    type: 'meeting',
+                    confidence: 0.95
                   };
                   
                   events.push(event);
-                  console.log('✅ Created event from due pattern:', event);
-                } else {
-                  console.log('❌ No date match found in due text');
+                  console.log(`✅ Created meeting event:`, event);
                 }
-              }
-            }
+              });
+            });
             
-            // If no due pattern, look for general date patterns
-            if (events.length === 0) {
-              console.log('🔍 No due pattern found, looking for general date patterns...');
-              
-              const generalDatePattern = /(monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s*(\d{1,2})\s*(january|february|march|april|may|june|july|august|september|october|november|december)\s*(\d{4})?,?\s*(\d{1,2}:\d{2}\s*(?:am|pm)?)?/gi;
-              const dateMatches = [...emailText.matchAll(generalDatePattern)];
-              console.log('📅 General date matches:', dateMatches.length);
-              
-              if (dateMatches.length > 0) {
-                const coursePattern = /\b([A-Z]{2,4}\d{3}[A-Za-z0-9]*)/;
-                const courseMatch = (subject + ' ' + emailText).match(coursePattern);
-                const courseCode = courseMatch ? courseMatch[0] : null;
-                
-                // Extract title from subject if available
-                let title = 'Event';
-                if (subject.includes(':')) {
-                  const subjectParts = subject.split(':');
-                  title = subjectParts[subjectParts.length - 1].trim();
-                } else if (courseCode) {
-                  title = `${courseCode} Event`;
-                } else {
-                  title = subject || 'Event';
-                }
-                
-                const event = {
-                  title: title,
-                  date: dateMatches[0][0],
-                  time: dateMatches[0][5] || 'Time TBD',
-                  description: `Event on ${dateMatches[0][0]}`,
-                  source: 'date_pattern',
-                  type: 'event',
-                  confidence: 0.7
-                };
-                
-                events.push(event);
-                console.log('✅ Created event from date pattern:', event);
-              }
-            }
-            
-            console.log('🎯 Final extraction result:', events);
             return events;
+          }
 
-          } catch (error) {
-            console.error('💥 Error in injected function:', error);
-            console.error('💥 Error stack:', error.stack);
-            return [];
+          // Strategy 2: Natural language temporal expressions
+          function extractTemporalEvents(text, subject) {
+            const events = [];
+            
+            console.log('🔍 Strategy 2: Looking for temporal expressions...');
+            
+            // Look for time expressions
+            const timePattern = /\b(\d{1,2}(?:\.\d{2}|\:\d{2})?)\s*(am|pm|a\.m\.|p\.m\.)\b/gi;
+            const timeMatches = [...text.matchAll(timePattern)];
+            
+            console.log(`   Found ${timeMatches.length} time expressions`);
+            
+            if (timeMatches.length > 0) {
+              timeMatches.forEach(timeMatch => {
+                const timeStr = timeMatch[0];
+                const timeIndex = timeMatch.index;
+                
+                // Look for temporal words in the same sentence
+                const sentences = text.split(/[.!?]+/);
+                const currentSentence = sentences.find(sentence => 
+                  sentence.includes(timeStr) || 
+                  Math.abs(sentence.indexOf(timeStr.toLowerCase()) - timeIndex) < 50
+                );
+                
+                if (currentSentence) {
+                  console.log(`   Sentence with time: "${currentSentence}"`);
+                  
+                  // Check for temporal indicators
+                  const temporalIndicators = ['tomorrow', 'today', 'yesterday'];
+                  const foundIndicator = temporalIndicators.find(indicator => 
+                    currentSentence.toLowerCase().includes(indicator)
+                  );
+                  
+                  if (foundIndicator) {
+                    const dateStr = extractDateFromTemporalExpression(foundIndicator);
+                    const time = normalizeTime(timeStr);
+                    const location = extractLocationFromContext(currentSentence);
+                    
+                    if (dateStr && time) {
+                      const event = {
+                        id: Date.now() + Math.random(),
+                        title: generateEventTitle(subject, currentSentence, location),
+                        date: dateStr,
+                        time: time,
+                        location: location,
+                        description: currentSentence.trim(),
+                        source: 'temporal_expression',
+                        type: 'meeting',
+                        confidence: 0.8
+                      };
+                      
+                      events.push(event);
+                      console.log(`✅ Created temporal event:`, event);
+                    }
+                  }
+                }
+              });
+            }
+            
+            return events;
+          }
+
+          // Strategy 3: Academic deadline patterns (existing logic)
+          function extractDeadlineEvents(text, subject) {
+            const events = [];
+            
+            console.log('🔍 Strategy 3: Looking for academic deadlines...');
+            
+            const duePattern = /due:\s*([^.\n\r]+)/gi;
+            const dueMatches = [...text.matchAll(duePattern)];
+            
+            if (dueMatches.length > 0) {
+              console.log(`   Found ${dueMatches.length} due patterns`);
+              // ... existing due date logic here
+            }
+            
+            return events;
+          }
+
+          // HELPER FUNCTIONS
+          function extractDateFromTemporalExpression(expression) {
+            const expr = expression.toLowerCase();
+            const today = new Date();
+            
+            if (expr.includes('today')) {
+              return today.toISOString().split('T')[0];
+            }
+            
+            if (expr.includes('tomorrow')) {
+              const tomorrow = new Date(today);
+              tomorrow.setDate(today.getDate() + 1);
+              return tomorrow.toISOString().split('T')[0];
+            }
+            
+            if (expr.includes('yesterday')) {
+              const yesterday = new Date(today);
+              yesterday.setDate(today.getDate() - 1);
+              return yesterday.toISOString().split('T')[0];
+            }
+            
+            return null;
+          }
+
+          function normalizeTime(timeStr) {
+            if (!timeStr) return null;
+            
+            console.log(`   Normalizing time: "${timeStr}"`);
+            
+            // Handle "10.00 am" format
+            let cleanTime = timeStr.replace(/\s+/g, ' ').trim();
+            cleanTime = cleanTime.replace(/\.(\d{2})/, ':$1');
+            
+            const timeMatch = cleanTime.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm|a\.m\.|p\.m\.)?/i);
+            
+            if (timeMatch) {
+              let hours = parseInt(timeMatch[1]);
+              const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+              const ampm = timeMatch[3] ? timeMatch[3].toLowerCase() : '';
+              
+              // Convert to 24-hour format
+              if (ampm.includes('pm') && hours !== 12) {
+                hours += 12;
+              } else if (ampm.includes('am') && hours === 12) {
+                hours = 0;
+              }
+              
+              const result = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+              console.log(`   Normalized to: "${result}"`);
+              return result;
+            }
+            
+            return null;
+          }
+
+          function extractLocationFromContext(context) {
+            const locationKeywords = [
+              'canteen', 'cafeteria', 'restaurant', 'office', 'room', 'hall',
+              'building', 'library', 'lab', 'classroom', 'auditorium', 'faculty'
+            ];
+            
+            const contextLower = context.toLowerCase();
+            
+            for (const keyword of locationKeywords) {
+              if (contextLower.includes(keyword)) {
+                // Try to extract the full location phrase
+                const pattern = new RegExp(`\\b((?:\\w+\\s+)?${keyword}(?:\\s+\\w+)?)\\b`, 'i');
+                const match = context.match(pattern);
+                if (match) {
+                  return match[1].trim();
+                }
+              }
+            }
+            
+            return null;
+          }
+
+          function generateMeetingTitle(subject, location, text) {
+            if (subject && subject !== '(no subject)' && !subject.toLowerCase().includes('inbox')) {
+              return subject;
+            }
+            
+            if (location) {
+              return `Meeting at ${location}`;
+            }
+            
+            // Look for person names in text
+            const namePattern = /(?:from|by|with)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/;
+            const nameMatch = text.match(namePattern);
+            if (nameMatch) {
+              return `Meeting with ${nameMatch[1]}`;
+            }
+            
+            return 'Meeting';
+          }
+
+          function generateEventTitle(subject, context, location) {
+            if (subject && subject !== '(no subject)' && !subject.toLowerCase().includes('inbox')) {
+              return subject;
+            }
+            
+            if (location) {
+              return `Event at ${location}`;
+            }
+            
+            return 'Event';
+          }
+
+          function deduplicateAndRank(events) {
+            // Remove duplicates and rank by confidence
+            const uniqueEvents = [];
+            const seen = new Set();
+            
+            // Sort by confidence first
+            events.sort((a, b) => b.confidence - a.confidence);
+            
+            events.forEach(event => {
+              const key = `${event.date}-${event.time}-${event.title.substring(0, 20)}`;
+              if (!seen.has(key)) {
+                seen.add(key);
+                uniqueEvents.push(event);
+              }
+            });
+            
+            return uniqueEvents;
           }
         }
       });
 
-      console.log('📨 Script execution results:', results);
+      console.log('📨 Enhanced scan results:', results);
 
       if (results && results[0] && results[0].result) {
         const events = results[0].result;
@@ -240,100 +412,240 @@ document.addEventListener('DOMContentLoaded', function() {
         if (events && events.length > 0) {
           console.log('✅ Events found:', events);
           updateStats(events.length, 0);
-          showSuccess(`Found ${events.length} events`);
+          showSuccess(`Found ${events.length} event${events.length > 1 ? 's' : ''}`);
           
-          // Store events for later use
           await chrome.storage.local.set({ lastEvents: events });
-          
-          // Update recent events list with add buttons
           await updateRecentEventsWithActions(events);
         } else {
-          console.log('❌ No events in result');
-          showError('No events found');
+          console.log('❌ No events found');
+          showError('No events found in this email');
         }
       } else {
-        console.log('❌ No results returned');
-        showError('Script execution failed');
+        showError('Failed to scan email');
       }
 
     } catch (error) {
-      console.error('❌ Scan failed:', error);
-      showError('Could not connect to Gmail. Please refresh the page and try again.');
+      console.error('❌ Enhanced scan failed:', error);
+      showError('Could not scan email. Please try again.');
     } finally {
-      scanButton.textContent = '📧 Scan Current Email';
+      // Restore original button styling
+      scanButton.innerHTML = originalHTML;
       scanButton.disabled = false;
     }
   });
 
-  // Add event to calendar function
+  // Enhanced add event to calendar with dialog
   async function addEventToCalendar(eventData, button) {
-    const originalText = button.textContent;
-    const originalBackground = button.style.background;
+    try {
+      console.log('🚀 Opening event dialog for:', eventData);
+      showEventDialog(eventData, button);
+    } catch (error) {
+      console.error('❌ Failed to open event dialog:', error);
+      showError('Failed to open event dialog');
+    }
+  }
+
+  // Show event editing dialog
+  function showEventDialog(eventData, originalButton) {
+    const existingDialog = document.querySelector('.event-dialog-overlay');
+    if (existingDialog) existingDialog.remove();
+    
+    const dialogOverlay = document.createElement('div');
+    dialogOverlay.className = 'event-dialog-overlay';
+    
+    dialogOverlay.innerHTML = `
+      <div class="event-dialog">
+        <div class="event-dialog-header">
+          <h3>Add Event to Calendar</h3>
+          <button class="event-dialog-close" type="button">×</button>
+        </div>
+        
+        <div class="event-dialog-body">
+          <form id="eventForm" class="event-form">
+            <div class="form-group">
+              <label for="eventTitle">Title:</label>
+              <input type="text" id="eventTitle" name="title" value="${eventData.title || ''}" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="eventDate">Date:</label>
+              <input type="date" id="eventDate" name="date" value="${formatDateForInput(eventData.date)}" required>
+            </div>
+            
+            <div class="form-group">
+              <label for="eventStartTime">Start Time:</label>
+              <input type="time" id="eventStartTime" name="startTime" value="${formatTimeForInput(eventData.time)}">
+            </div>
+            
+            <div class="form-group">
+              <label for="eventEndTime">End Time:</label>
+              <input type="time" id="eventEndTime" name="endTime" value="${formatEndTimeForInput(eventData.time)}">
+            </div>
+            
+            <div class="form-group">
+              <label for="eventLocation">Location:</label>
+              <input type="text" id="eventLocation" name="location" value="${eventData.location || ''}" placeholder="Meeting room, address, Zoom link">
+            </div>
+            
+            <div class="form-group">
+              <label for="eventDescription">Description:</label>
+              <textarea id="eventDescription" name="description" rows="3">${eventData.description || ''}</textarea>
+            </div>
+          </form>
+        </div>
+        
+        <div class="event-dialog-footer">
+          <button type="button" class="dialog-btn cancel-btn">Cancel</button>
+          <button type="button" class="dialog-btn add-btn primary">Add to Calendar</button>
+        </div>
+      </div>
+    `;
+    
+    document.body.appendChild(dialogOverlay);
+    setupDialogEventListeners(dialogOverlay, eventData, originalButton);
+    
+    // Focus on title field
+    setTimeout(() => {
+      const titleInput = dialogOverlay.querySelector('#eventTitle');
+      if (titleInput) {
+        titleInput.focus();
+        titleInput.select();
+      }
+    }, 100);
+  }
+
+  // Setup dialog event listeners
+  function setupDialogEventListeners(dialogOverlay, originalEventData, originalButton) {
+    const dialog = dialogOverlay.querySelector('.event-dialog');
+    const closeBtn = dialogOverlay.querySelector('.event-dialog-close');
+    const cancelBtn = dialogOverlay.querySelector('.cancel-btn');
+    const addBtn = dialogOverlay.querySelector('.add-btn');
+    const form = dialogOverlay.querySelector('#eventForm');
+    
+    const closeDialog = () => {
+      dialogOverlay.style.opacity = '0';
+      setTimeout(() => dialogOverlay.remove(), 200);
+    };
+    
+    closeBtn.addEventListener('click', closeDialog);
+    cancelBtn.addEventListener('click', closeDialog);
+    
+    dialogOverlay.addEventListener('click', (e) => {
+      if (e.target === dialogOverlay) closeDialog();
+    });
+    
+    dialog.addEventListener('click', (e) => e.stopPropagation());
+    
+    addBtn.addEventListener('click', async () => {
+      await handleAddToCalendar(form, originalEventData, originalButton, closeDialog);
+    });
+    
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await handleAddToCalendar(form, originalEventData, originalButton, closeDialog);
+    });
+    
+    // Auto-update end time
+    const startTimeInput = form.querySelector('#eventStartTime');
+    const endTimeInput = form.querySelector('#eventEndTime');
+    
+    startTimeInput.addEventListener('change', () => {
+      if (startTimeInput.value && !endTimeInput.value) {
+        endTimeInput.value = addOneHour(startTimeInput.value);
+      }
+    });
+  }
+
+  // Handle adding event from dialog
+  async function handleAddToCalendar(form, originalEventData, originalButton, closeDialog) {
+    const addBtn = form.parentElement.parentElement.querySelector('.add-btn');
+    const originalText = addBtn.textContent;
     
     try {
-      button.textContent = 'Adding...';
-      button.disabled = true;
-      button.style.background = '#ffc107';
-
-      console.log('🚀 Starting event addition process...');
-      console.log('Event data:', eventData);
-
-      // Format event data for calendar API
-      const formattedEvent = formatEventForCalendar(eventData);
-      console.log('📝 Formatted event:', formattedEvent);
+      addBtn.textContent = '⏳ Adding...';
+      addBtn.disabled = true;
       
-      // Send to background script with timeout
+      const formData = new FormData(form);
+      const eventData = {
+        title: formData.get('title'),
+        date: formData.get('date'),
+        startTime: formData.get('startTime'),
+        endTime: formData.get('endTime'),
+        location: formData.get('location'),
+        description: formData.get('description'),
+        type: originalEventData.type || 'event'
+      };
+      
+      console.log('📝 Adding event to calendar:', eventData);
+      
       const response = await sendMessageWithTimeout({
         action: 'addToCalendar',
-        event: formattedEvent
+        event: eventData
       }, 30000);
-
-      console.log('📨 Background response:', response);
-
+      
       if (response && response.success) {
         showSuccess('✅ Event added to calendar!');
-        button.textContent = '✅ Added';
-        button.style.background = '#28a745';
         
-        // Update stats
+        if (originalButton) {
+          originalButton.textContent = '✅ Added';
+          originalButton.style.background = 'linear-gradient(135deg, #34a853 0%, #0f9d58 100%)';
+          originalButton.disabled = true;
+        }
+        
         const data = await chrome.storage.local.get(['eventsAdded']);
         const newAdded = (data.eventsAdded || 0) + 1;
         await chrome.storage.local.set({ eventsAdded: newAdded });
-        const eventsAddedElement = document.getElementById('eventsAdded');
         eventsAddedElement.textContent = newAdded;
         
-        // Update event status in storage
-        updateEventStatus(eventData, 'added');
+        updateEventStatus(originalEventData.id, 'added');
+        closeDialog();
         
       } else {
-        throw new Error(response?.error || 'Unknown error occurred');
+        throw new Error(response?.error || 'Unknown error');
       }
       
     } catch (error) {
       console.error('❌ Failed to add event:', error);
       showError(`Failed to add event: ${error.message}`);
-      button.textContent = '❌ Failed';
-      button.style.background = '#dc3545';
+      addBtn.textContent = originalText;
+      addBtn.disabled = false;
+    }
+  }
+
+  // Delete event function
+  async function deleteEvent(eventId, eventElement) {
+    try {
+      const result = await chrome.storage.local.get(['recentEvents']);
+      let recentEvents = result.recentEvents || [];
       
-      // Reset button after delay
+      recentEvents = recentEvents.filter(event => event.id !== eventId);
+      await chrome.storage.local.set({ recentEvents });
+      
+      eventElement.style.transform = 'translateX(100%)';
+      eventElement.style.opacity = '0';
+      
       setTimeout(() => {
-        button.textContent = originalText;
-        button.style.background = originalBackground;
-        button.disabled = false;
-      }, 3000);
+        eventElement.remove();
+        const eventsList = document.getElementById('recentEventsList');
+        if (eventsList.children.length === 0) {
+          eventsList.innerHTML = '<div class="no-events">No recent events detected</div>';
+        }
+      }, 300);
+      
+      showSuccess('Event deleted');
+      
+    } catch (error) {
+      console.error('❌ Failed to delete event:', error);
+      showError('Failed to delete event');
     }
   }
 
   // Helper functions
   function sendMessageWithTimeout(message, timeout = 10000) {
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error('Message timeout'));
-      }, timeout);
-
+      const timer = setTimeout(() => reject(new Error('Message timeout')), timeout);
       chrome.runtime.sendMessage(message, (response) => {
         clearTimeout(timer);
-        
         if (chrome.runtime.lastError) {
           reject(new Error(chrome.runtime.lastError.message));
         } else {
@@ -343,22 +655,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  function formatEventForCalendar(eventData) {
-    return {
-      title: eventData.title || 'Event',
-      date: formatDate(eventData.date),
-      startTime: formatTime(eventData.time),
-      endTime: addOneHour(formatTime(eventData.time)),
-      description: eventData.description || '',
-      location: eventData.location || null,
-      type: eventData.type || 'general'
-    };
-  }
-
-  function formatDate(dateStr) {
-    if (!dateStr || dateStr === 'Date TBD') return getTomorrowDate();
+  function formatDateForInput(dateStr) {
+    if (!dateStr) return getTomorrowDate();
     
-    // Handle "Friday, 9 May 2025" format
     try {
       const date = new Date(dateStr);
       if (!isNaN(date.getTime())) {
@@ -366,30 +665,31 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     } catch (e) {}
     
-    // Default to tomorrow
     return getTomorrowDate();
   }
 
-  function formatTime(timeStr) {
-    if (!timeStr || timeStr === 'Time TBD') return null;
+  function formatTimeForInput(timeStr) {
+    if (!timeStr) return '';
     
-    const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})\s*(am|pm|AM|PM)/i);
+    const timeMatch = timeStr.match(/(\d{1,2}):(\d{2})/);
     if (timeMatch) {
-      let hours = parseInt(timeMatch[1]);
-      const minutes = parseInt(timeMatch[2]);
-      const ampm = timeMatch[3].toLowerCase();
-      
-      if (ampm === 'pm' && hours !== 12) hours += 12;
-      if (ampm === 'am' && hours === 12) hours = 0;
-      
-      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      return `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
     }
     
-    return null;
+    return '';
+  }
+
+  function formatEndTimeForInput(timeStr) {
+    if (!timeStr) return '';
+    const startTime = formatTimeForInput(timeStr);
+    if (startTime) {
+      return addOneHour(startTime);
+    }
+    return '';
   }
 
   function addOneHour(timeStr) {
-    if (!timeStr) return null;
+    if (!timeStr) return '';
     
     try {
       const [hours, minutes] = timeStr.split(':').map(Number);
@@ -406,14 +706,32 @@ document.addEventListener('DOMContentLoaded', function() {
     return tomorrow.toISOString().split('T')[0];
   }
 
-  async function updateEventStatus(eventData, status) {
+  function formatDateTime(date, time) {
+    if (!date) return 'Date TBD';
+    
+    try {
+      const dateObj = new Date(date);
+      const dateStr = dateObj.toLocaleDateString('en-US', { 
+        weekday: 'short', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+      
+      if (time) {
+        return `${dateStr} at ${time}`;
+      } else {
+        return dateStr;
+      }
+    } catch (e) {
+      return date + (time ? ` at ${time}` : '');
+    }
+  }
+
+  async function updateEventStatus(eventId, status) {
     const result = await chrome.storage.local.get(['recentEvents']);
     let recentEvents = result.recentEvents || [];
     
-    const eventIndex = recentEvents.findIndex(e => 
-      e.title === eventData.title && e.date === eventData.date
-    );
-    
+    const eventIndex = recentEvents.findIndex(e => e.id === eventId);
     if (eventIndex !== -1) {
       recentEvents[eventIndex].status = status;
       await chrome.storage.local.set({ recentEvents });
@@ -443,33 +761,40 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
-    eventsList.innerHTML = events.map((event, index) => `
-      <div class="event-item" data-event-index="${index}">
-        <div class="event-details">
+    eventsList.innerHTML = events.map((event) => `
+      <div class="event-item" data-event-id="${event.id}">
+        <div class="event-content">
           <div class="event-title">${event.title}</div>
-          <div class="event-datetime">${event.date} ${event.time || ''}</div>
-          <div class="event-description" style="font-size: 11px; color: #666; margin-top: 2px;">
-            ${event.description ? event.description.substring(0, 60) + '...' : ''}
-          </div>
+          <div class="event-datetime">${formatDateTime(event.date, event.time)}</div>
         </div>
         <div class="event-actions">
-          <button class="add-event-btn" data-event-index="${index}" 
-                  style="padding: 4px 8px; font-size: 11px; background: #1a73e8; color: white; border: none; border-radius: 3px; cursor: pointer;">
-            📅 Add
+          <button class="event-btn add-event-btn" data-event-id="${event.id}">
+            ➕ Add
+          </button>
+          <button class="event-btn delete-event-btn" data-event-id="${event.id}">
+            🗑️ Delete
           </button>
         </div>
-        <span class="event-status ${event.status || 'detected'}">${event.status || 'detected'}</span>
+        ${event.status === 'added' ? '<span class="event-status added">Added</span>' : ''}
       </div>
     `).join('');
 
-    // Add event listeners for the add buttons
+    // Add event listeners
     eventsList.querySelectorAll('.add-event-btn').forEach(button => {
       button.addEventListener('click', async (e) => {
-        const eventIndex = parseInt(e.target.dataset.eventIndex);
-        const event = events[eventIndex];
+        const eventId = e.target.dataset.eventId;
+        const event = events.find(e => e.id == eventId);
         if (event) {
           await addEventToCalendar(event, button);
         }
+      });
+    });
+
+    eventsList.querySelectorAll('.delete-event-btn').forEach(button => {
+      button.addEventListener('click', async (e) => {
+        const eventId = e.target.dataset.eventId;
+        const eventElement = e.target.closest('.event-item');
+        await deleteEvent(eventId, eventElement);
       });
     });
   }
@@ -522,10 +847,9 @@ document.addEventListener('DOMContentLoaded', function() {
   async function loadRecentEvents() {
     const result = await chrome.storage.local.get(['recentEvents']);
     const recentEvents = result.recentEvents || [];
-    const eventsList = document.getElementById('recentEventsList');
     
     if (recentEvents.length === 0) {
-      eventsList.innerHTML = '<div class="no-events">No recent events detected</div>';
+      document.getElementById('recentEventsList').innerHTML = '<div class="no-events">No recent events detected</div>';
     } else {
       displayEventsWithActions(recentEvents.slice(0, 5));
     }

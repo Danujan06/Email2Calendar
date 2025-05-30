@@ -128,7 +128,6 @@ body {
   border-radius: 16px;
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.7) 100%);
   cursor: pointer;
-  font-size: 24px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -139,6 +138,12 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.3);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
   overflow: hidden;
+  
+  /* FIXED: Prevent font size changes */
+  font-size: 10px !important;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+  text-transform: none !important;
+  letter-spacing: normal !important;
 }
 
 .action-btn::before {
@@ -178,21 +183,36 @@ body {
 }
 
 .action-btn .btn-icon {
-  font-size: 24px;
+  font-size: 24px !important;
   margin-bottom: 4px;
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
+  line-height: 1;
 }
 
 .action-btn .btn-label {
-  font-size: 10px;
+  font-size: 10px !important;
   font-weight: 600;
   opacity: 0.8;
   text-align: center;
   line-height: 1.2;
+  margin: 0;
+  padding: 0;
+  white-space: nowrap;
 }
 
 .action-btn.primary .btn-label {
   opacity: 0.9;
+}
+
+/* FIXED: Ensure scan button text stays consistent */
+#scanCurrentEmail {
+  font-size: 10px !important;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
+}
+
+#scanCurrentEmail .btn-label {
+  font-size: 10px !important;
+  font-weight: 600 !important;
 }
 
 .recent-events {
@@ -216,7 +236,7 @@ body {
 }
 
 .events-list {
-  max-height: 200px;
+  max-height: 300px;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(26, 115, 232, 0.3) transparent;
@@ -236,86 +256,109 @@ body {
   border-radius: 2px;
 }
 
+/* IMPROVED: Clean event item layout */
 .event-item {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 12px;
-  align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
   transition: all 0.2s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 .event-item:last-child {
-  border-bottom: none;
+  margin-bottom: 0;
 }
 
 .event-item:hover {
-  background: rgba(26, 115, 232, 0.02);
-  border-radius: 8px;
-  margin: 0 -8px;
-  padding: 12px 8px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  transform: translateY(-1px);
 }
 
-.event-details {
-  min-width: 0;
+/* IMPROVED: Better event content layout */
+.event-content {
+  margin-bottom: 12px;
 }
 
 .event-title {
   font-weight: 600;
   color: #202124;
-  font-size: 14px;
-  margin-bottom: 4px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 16px;
+  margin-bottom: 6px;
+  line-height: 1.3;
 }
 
 .event-datetime {
   color: #5f6368;
-  font-size: 12px;
-  margin-bottom: 4px;
+  font-size: 14px;
   font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
-.event-description {
-  font-size: 11px;
-  color: #80868b;
-  margin-top: 2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.event-datetime::before {
+  content: '📅';
+  font-size: 12px;
 }
 
+/* IMPROVED: Button layout at bottom */
 .event-actions {
   display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.event-btn {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
   gap: 4px;
 }
 
 .add-event-btn {
-  padding: 6px 10px;
-  font-size: 10px;
-  background: linear-gradient(135deg, #1a73e8 0%, #4285f4 100%);
+  background: linear-gradient(135deg, #34a853 0%, #0f9d58 100%);
   color: white;
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(26, 115, 232, 0.3);
+  box-shadow: 0 2px 8px rgba(52, 168, 83, 0.3);
 }
 
 .add-event-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.4);
-  background: linear-gradient(135deg, #1557b0 0%, #3367d6 100%);
+  box-shadow: 0 4px 12px rgba(52, 168, 83, 0.4);
+  background: linear-gradient(135deg, #0f9d58 0%, #0d8043 100%);
 }
 
-.add-event-btn:active {
+.delete-event-btn {
+  background: linear-gradient(135deg, #ea4335 0%, #d33b2c 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(234, 67, 53, 0.3);
+}
+
+.delete-event-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(234, 67, 53, 0.4);
+  background: linear-gradient(135deg, #d33b2c 0%, #b52d20 100%);
+}
+
+.event-btn:active {
   transform: translateY(0);
 }
 
+/* Status badge */
 .event-status {
+  position: absolute;
+  top: 12px;
+  right: 12px;
   font-size: 10px;
   padding: 4px 8px;
   border-radius: 12px;
@@ -334,12 +377,6 @@ body {
   background: linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%);
   color: #2e7d32;
   border: 1px solid rgba(46, 125, 50, 0.2);
-}
-
-.event-status.error {
-  background: linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%);
-  color: #c62828;
-  border: 1px solid rgba(198, 40, 40, 0.2);
 }
 
 .no-events {
@@ -415,65 +452,227 @@ body {
   border-color: rgba(244, 67, 54, 0.3);
 }
 
-.popup-notification.info {
-  background: linear-gradient(135deg, rgba(33, 150, 243, 0.9) 0%, rgba(30, 136, 229, 0.9) 100%);
+/* Add this to your popup.css - Event Dialog Styles */
+
+.event-dialog-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.event-dialog {
+  background: white;
+  border-radius: 16px;
+  width: 450px;
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+  transform: scale(1);
+  transition: transform 0.2s ease;
+}
+
+.event-dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e1e3e1;
+  background: linear-gradient(135deg, #1a73e8 0%, #4285f4 100%);
   color: white;
-  border-color: rgba(33, 150, 243, 0.3);
+  border-radius: 16px 16px 0 0;
 }
 
-/* Debug Panel Styling */
-.debug-section {
-  margin-top: 16px;
-  padding: 12px;
-  background: linear-gradient(135deg, rgba(255, 243, 205, 0.8) 0%, rgba(255, 236, 179, 0.8) 100%);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 193, 7, 0.3);
-  backdrop-filter: blur(10px);
-}
-
-.debug-section h4 {
-  margin: 0 0 8px 0;
-  font-size: 12px;
-  color: #e65100;
+.event-dialog-header h3 {
+  margin: 0;
+  font-size: 18px;
   font-weight: 600;
 }
 
-.debug-buttons {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px;
-}
-
-.debug-btn {
-  padding: 6px 8px;
-  font-size: 10px;
-  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
-  color: white;
+.event-dialog-close {
+  background: none;
   border: none;
-  border-radius: 8px;
+  font-size: 24px;
   cursor: pointer;
-  font-weight: 600;
+  color: white;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.event-dialog-close:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.event-dialog-body {
+  padding: 24px;
+}
+
+.event-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: #202124;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.form-group input,
+.form-group textarea {
+  padding: 12px 16px;
+  border: 2px solid #e1e3e1;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  background: #fafbfc;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
 }
 
-.debug-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
-  background: linear-gradient(135deg, #f57c00 0%, #ef6c00 100%);
+.form-group input:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #1a73e8;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
 }
 
-#debugOutput {
-  margin-top: 8px;
-  font-size: 10px;
-  background: rgba(248, 249, 250, 0.9);
-  padding: 8px;
-  border-radius: 6px;
-  max-height: 100px;
-  overflow-y: auto;
-  font-family: 'Courier New', monospace;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  color: #333;
+.form-group textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: inherit;
+  line-height: 1.4;
+}
+
+.form-group input[type="date"],
+.form-group input[type="time"] {
+  cursor: pointer;
+}
+
+.event-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 20px 24px;
+  border-top: 1px solid #e1e3e1;
+  background: #fafbfc;
+  border-radius: 0 0 16px 16px;
+}
+
+.dialog-btn {
+  padding: 10px 20px;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  min-width: 80px;
+}
+
+.dialog-btn:hover {
+  background: #f8f9fa;
+  border-color: #bdc1c6;
+}
+
+.dialog-btn.primary {
+  background: linear-gradient(135deg, #1a73e8 0%, #4285f4 100%);
+  color: white;
+  border-color: #1a73e8;
+}
+
+.dialog-btn.primary:hover {
+  background: linear-gradient(135deg, #1557b0 0%, #3367d6 100%);
+  border-color: #1557b0;
+}
+
+.dialog-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.dialog-btn:disabled:hover {
+  background: #f8f9fa;
+  border-color: #dadce0;
+}
+
+.dialog-btn.primary:disabled:hover {
+  background: linear-gradient(135deg, #1a73e8 0%, #4285f4 100%);
+}
+
+/* Form validation styles */
+.form-group input:invalid {
+  border-color: #ea4335;
+}
+
+.form-group input:invalid:focus {
+  border-color: #ea4335;
+  box-shadow: 0 0 0 3px rgba(234, 67, 53, 0.1);
+}
+
+/* Loading state */
+.dialog-btn.loading {
+  position: relative;
+  color: transparent;
+}
+
+.dialog-btn.loading::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Mobile responsiveness */
+@media (max-width: 480px) {
+  .event-dialog {
+    width: 95vw;
+    margin: 20px;
+  }
+  
+  .event-dialog-header,
+  .event-dialog-body,
+  .event-dialog-footer {
+    padding: 16px;
+  }
+  
+  .dialog-btn {
+    padding: 12px 16px;
+    min-width: 70px;
+  }
 }
 
 /* Responsive adjustments */
@@ -495,10 +694,10 @@ body {
   }
   
   .action-btn .btn-icon {
-    font-size: 20px;
+    font-size: 20px !important;
   }
   
   .action-btn .btn-label {
-    font-size: 9px;
+    font-size: 9px !important;
   }
 }
