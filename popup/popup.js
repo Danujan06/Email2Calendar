@@ -402,11 +402,20 @@ document.addEventListener('DOMContentLoaded', function() {
         if (events && events.length > 0) {
           console.log('✅ NLP detected events:', events);
           
-          await autoAddEventsToCalendar(events);
+          // Check if auto-add is enabled
+          const settings = await chrome.storage.sync.get(['autoAddEvents']);
+          const autoAddEnabled = settings.autoAddEvents === true;
+          
+          if (autoAddEnabled) {
+            console.log('🤖 Auto-add enabled, adding events automatically...');
+            await autoAddEventsToCalendar(events);
+            showSuccess(`🧠 NLP detected and auto-added ${events.length} event${events.length > 1 ? 's' : ''}!`);
+          } else {
+            console.log('👁️ Auto-add disabled, showing events for manual review...');
+            showSuccess(`🧠 NLP detected ${events.length} event${events.length > 1 ? 's' : ''} - Click ➕ to add to calendar`);
+          }
           
           updateStats(events.length, 0);
-          showSuccess(`🧠 NLP detected ${events.length} event${events.length > 1 ? 's' : ''}`);
-          
           await chrome.storage.local.set({ lastEvents: events });
           await updateRecentEventsWithActions(events);
         } else {
@@ -895,6 +904,19 @@ document.addEventListener('DOMContentLoaded', function() {
     chrome.runtime.openOptionsPage();
   });
 
+  // Add auto-add toggle function
+  async function toggleAutoAdd() {
+    const result = await chrome.storage.sync.get(['autoAddEvents']);
+    const currentState = result.autoAddEvents === true; // Default to false for safety
+    const newState = !currentState;
+    await chrome.storage.sync.set({ autoAddEvents: newState });
+    showSuccess(`Auto-add events ${newState ? 'enabled' : 'disabled'}`);
+    console.log(`🔄 Auto-add events ${newState ? 'enabled' : 'disabled'}`);
+  }
+
+  // Expose auto-add toggle function globally for console access
+  window.toggleAutoAdd = toggleAutoAdd;
+
   // CLEAR CACHE FUNCTION
   async function clearProcessedEventsCache() {
     try {
@@ -1036,53 +1058,8 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Add test buttons to the popup interface
-  function addTestButtons() {
-    console.log('🔧 Adding test buttons to popup...');
-    
-    const actionsSection = document.querySelector('.actions-section');
-    if (actionsSection) {
-      // Test time slot button
-      const testTimeButton = document.createElement('button');
-      testTimeButton.className = 'action-btn';
-      testTimeButton.innerHTML = '🧪 Test 10 PM Event';
-      testTimeButton.onclick = () => {
-        testGoogleCalendarTimeSlot().catch(error => {
-          console.error('Test failed:', error);
-        });
-      };
-      actionsSection.appendChild(testTimeButton);
-      
-      // Test dinner email button
-      const testEmailButton = document.createElement('button');
-      testEmailButton.className = 'action-btn';
-      testEmailButton.innerHTML = '🍽️ Test Dinner Email';
-      testEmailButton.onclick = () => {
-        testDinnerEmail().catch(error => {
-          console.error('Dinner test failed:', error);
-        });
-      };
-      actionsSection.appendChild(testEmailButton);
-      
-      // Debug time parsing button
-      const debugButton = document.createElement('button');
-      debugButton.className = 'action-btn';
-      debugButton.innerHTML = '🔧 Debug Time Parsing';
-      debugButton.onclick = debugTimeParsing;
-      actionsSection.appendChild(debugButton);
-      
-      // Clear cache button
-      const clearCacheButton = document.createElement('button');
-      clearCacheButton.className = 'action-btn';
-      clearCacheButton.innerHTML = '🧹 Clear Cache';
-      clearCacheButton.onclick = clearProcessedEventsCache;
-      actionsSection.appendChild(clearCacheButton);
-      
-      console.log('✅ Test buttons added successfully');
-    } else {
-      console.error('❌ Could not find actions section to add test buttons');
-    }
-  }
+  // Test functions are available but not displayed in UI
+  // They can still be called from the console for debugging
 
   // DEBUG FUNCTIONS (can be removed in production)
   window.debugCalendarIntegration = async function() {
@@ -1225,19 +1202,22 @@ document.addEventListener('DOMContentLoaded', function() {
   window.debugTimeParsing = debugTimeParsing;
   window.clearProcessedEventsCache = clearProcessedEventsCache;
 
-  // Add test buttons when popup loads
-  setTimeout(() => {
-    addTestButtons();
-    console.log('🔧 Test functions loaded in popup context');
-    console.log('📍 Available functions:');
-    console.log('  - testGoogleCalendarTimeSlot()');
-    console.log('  - testDinnerEmail()');
-    console.log('  - debugTimeParsing()');
-    console.log('  - clearProcessedEventsCache()');
-    console.log('  - debugCalendarIntegration()');
-    console.log('  - testMessagePassing()');
-    console.log('  - clearAuthCache()');
-  }, 1000);
-
+  // Initialize popup without test buttons
   console.log('✅ Enhanced Popup script loaded successfully with duplicate prevention');
+  console.log('🔧 Debug functions available in console:');
+  console.log('  - toggleAutoAdd() - Enable/disable automatic event addition');
+  console.log('  - testGoogleCalendarTimeSlot() - Test calendar integration');
+  console.log('  - testDinnerEmail() - Test dinner email extraction');
+  console.log('  - debugTimeParsing() - Debug time parsing');
+  console.log('  - clearProcessedEventsCache() - Clear duplicate prevention cache');
+  console.log('  - debugCalendarIntegration() - Full calendar integration test');
+  console.log('  - testMessagePassing() - Test background script communication');
+  console.log('  - clearAuthCache() - Clear authentication cache');
+  
+  // Check current auto-add status
+  chrome.storage.sync.get(['autoAddEvents'], (result) => {
+    const autoAddEnabled = result.autoAddEvents === true;
+    console.log(`🔄 Auto-add events is currently: ${autoAddEnabled ? 'ENABLED' : 'DISABLED'}`);
+    console.log('   Use toggleAutoAdd() to change this setting');
+  });
 });
