@@ -1,350 +1,337 @@
-// Fixed background.js
 class CalendarAPI {
   constructor() {
     this.accessToken = null;
-    this.isAuthenticating = false;
+    this.processedEvents = new Set(); // Track processed events to prevent duplicates
   }
 
   async getAccessToken() {
-    // Prevent multiple simultaneous auth attempts
-    if (this.isAuthenticating) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return this.accessToken;
-    }
-
     if (!this.accessToken) {
-      this.isAuthenticating = true;
       try {
-        console.log('Starting OAuth flow...');
-        
-        // Try non-interactive first
-        let result;
-        try {
-          result = await chrome.identity.getAuthToken({ 
-            interactive: false,
-            scopes: [
-              'https://www.googleapis.com/auth/calendar',
-              'https://www.googleapis.com/auth/calendar.events'
-            ]
-          });
-          console.log('Non-interactive auth result:', result);
-        } catch (nonInteractiveError) {
-          console.log('Non-interactive auth failed, trying interactive:', nonInteractiveError);
-          
-          // Clear any cached tokens first
-          await this.clearTokens();
-          
-          result = await chrome.identity.getAuthToken({ 
-            interactive: true,
-            scopes: [
-              'https://www.googleapis.com/auth/calendar',
-              'https://www.googleapis.com/auth/calendar.events'
-            ]
-          });
-          console.log('Interactive auth result:', result);
-        }
-        
-        // Handle different response formats
-        this.accessToken = result?.token || result;
-        
-        if (!this.accessToken) {
-          throw new Error('No access token received');
-        }
-        
-        console.log('✅ Authentication successful');
-        
-        // Validate token by making a test request
-        await this.validateToken();
-        
+        const result = await chrome.identity.getAuthToken({ 
+          interactive: true,
+          scopes: [
+            'https://www.googleapis.com/auth/calendar',
+            'https://www.googleapis.com/auth/gmail.readonly'
+          ]
+        });
+        this.accessToken = result.token || result;
+        console.log('✅ Access token obtained');
       } catch (error) {
         console.error('❌ Authentication failed:', error);
-        this.accessToken = null;
         throw new Error(`Authentication failed: ${error.message}`);
-      } finally {
-        this.isAuthenticating = false;
       }
     }
-    
     return this.accessToken;
   }
 
-  async validateToken() {
-    if (!this.accessToken) return false;
-    
-    try {
-      const response = await fetch('https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1', {
-        headers: {
-          'Authorization': `Bearer ${this.accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      
-      if (response.status === 401) {
-        console.log('Token expired, clearing...');
-        await this.clearTokens();
-        this.accessToken = null;
-        return false;
-      }
-      
-      return response.ok;
-    } catch (error) {
-      console.error('Token validation failed:', error);
-      return false;
-    }
-  }
-
-  async clearTokens() {
-    try {
-      if (this.accessToken) {
-        await chrome.identity.removeCachedAuthToken({ token: this.accessToken });
-      }
-      await chrome.identity.clearAllCachedAuthTokens();
-      this.accessToken = null;
-      console.log('🗑️ Cleared cached tokens');
-    } catch (error) {
-      console.error('Error clearing tokens:', error);
-    }
-  }
-
   async addEvent(eventData) {
-    console.log('📅 Adding event:', eventData);
+    console.log('📅 Adding event with data:', eventData);
     
-    // Validate input
-    if (!eventData.title || !eventData.date) {
-      throw new Error('Missing required event data (title and date)');
+    // Create unique event identifier to prevent duplicates
+    const eventKey = `${eventData.title}-${eventData.date}-${eventData.startTime}`;
+    if (this.processedEvents.has(eventKey)) {
+      console.log('⚠️ Event already processed, skipping duplicate');
+      return { success: false, error: 'Event already exists' };
     }
-
+    
     const token = await this.getAccessToken();
     
-    // Create properly formatted event
-    const event = this.formatEventForAPI(eventData);
-    console.log('📝 Formatted event:', event);
+    // Validate required fields
+    if (!eventData.title || !eventData.date) {
+      throw new Error('Event must have title and date');
+    }
+
+    // Create event object with proper time handling
+    const event = {
+      summary: eventData.title || 'Event',
+      description: this.buildDescription(eventData),
+      location: eventData.location || undefined
+    };
+
+    // CRITICAL FIX: Proper date/time handling with timezone
+    if (eventData.startTime && eventData.startTime !== 'Time TBD' && eventData.startTime !== null) {
+      // Timed event - use dateTime format with proper timezone
+      console.log('⏰ Creating timed event with timezone handling');
+      
+      const userTimezone = this.getUserTimezone();
+      console.log('🌍 User timezone:', userTimezone);
+      
+      const startDateTime = this.createProperDateTimeString(eventData.date, eventData.startTime, userTimezone);
+      const endDateTime = this.createProperDateTimeString(eventData.date, eventData.endTime || this.addHour(eventData.startTime), userTimezone);
+      
+      event.start = {
+        dateTime: startDateTime,
+        timeZone: userTimezone
+      };
+      event.end = {
+        dateTime: endDateTime,
+        timeZone: userTimezone
+      };
+      
+      console.log('📅 Timed event created with proper timezone:', {
+        start: event.start,
+        end: event.end
+      });
+    } else {
+      // All-day event - use date format
+      console.log('📅 Creating all-day event');
+      
+      event.start = { date: eventData.date };
+      event.end = { date: this.getNextDay(eventData.date) };
+      
+      console.log('📅 All-day event created:', {
+        start: event.start,
+        end: event.end
+      });
+    }
 
     try {
-      const response = await this.makeAPIRequest(
-        'https://www.googleapis.com/calendar/v3/calendars/primary/events',
-        'POST',
-        event,
-        token
-      );
+      console.log('🚀 Sending to Google Calendar API:', event);
+      
+      const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(event)
+      });
 
-      console.log('✅ Event created successfully:', response);
+      console.log('📡 API Response status:', response.status);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('❌ Calendar API error:', errorData);
+        throw new Error(`Calendar API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Event created successfully:', result);
+      
+      // Mark event as processed to prevent duplicates
+      this.processedEvents.add(eventKey);
+      
+      // Clean up old processed events (keep only last 100)
+      if (this.processedEvents.size > 100) {
+        const entries = Array.from(this.processedEvents);
+        this.processedEvents.clear();
+        entries.slice(-50).forEach(entry => this.processedEvents.add(entry));
+      }
+      
       return {
         success: true,
-        eventId: response.id,
-        htmlLink: response.htmlLink,
-        event: response
+        eventId: result.id,
+        htmlLink: result.htmlLink,
+        event: result
       };
     } catch (error) {
-      console.error('❌ Failed to create event:', error);
+      console.error('❌ Error adding event:', error);
       throw error;
     }
   }
 
-  formatEventForAPI(eventData) {
-    const event = {
-      summary: eventData.title || 'Meeting',
-      description: this.buildDescription(eventData)
-    };
+  // CRITICAL FIX: Proper datetime string creation with timezone
+  createProperDateTimeString(date, time, timezone) {
+    // Ensure date is in YYYY-MM-DD format
+    const dateStr = this.normalizeDate(date);
+    
+    // Ensure time is in HH:MM format
+    const timeStr = this.normalizeTime(time);
+    
+    if (!dateStr || !timeStr) {
+      throw new Error(`Invalid date/time: date=${dateStr}, time=${timeStr}`);
+    }
+    
+    // Create proper datetime string WITHOUT timezone suffix
+    // Let Google Calendar API handle timezone through the timeZone field
+    const dateTimeString = `${dateStr}T${timeStr}:00`;
+    
+    console.log(`🕐 Created datetime string: ${dateTimeString} (timezone: ${timezone})`);
+    return dateTimeString;
+  }
 
-    // Handle date/time formatting
-    if (eventData.startTime && eventData.startTime !== 'Time TBD') {
-      // Timed event
-      const startDateTime = this.formatDateTime(eventData.date, eventData.startTime);
-      const endDateTime = this.formatDateTime(eventData.date, eventData.endTime || this.addOneHour(eventData.startTime));
+  // Get user's timezone in IANA format
+  getUserTimezone() {
+    try {
+      // Get the user's timezone from the browser
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      console.log('🌍 Detected user timezone:', timezone);
       
-      event.start = {
-        dateTime: startDateTime,
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-      };
-      event.end = {
-        dateTime: endDateTime,
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone
-      };
-    } else {
-      // All-day event
-      const eventDate = this.normalizeDate(eventData.date);
-      event.start = { date: eventDate };
-      event.end = { date: this.getNextDay(eventDate) };
+      // Validate it's a proper IANA timezone
+      if (this.isValidIANATimezone(timezone)) {
+        return timezone;
+      } else {
+        console.warn('⚠️ Invalid timezone detected, falling back to UTC');
+        return 'UTC';
+      }
+    } catch (error) {
+      console.error('❌ Error getting timezone:', error);
+      return 'UTC'; // Fallback to UTC
     }
+  }
 
-    // Add location if provided
-    if (eventData.location) {
-      event.location = eventData.location;
+  // Validate IANA timezone format
+  isValidIANATimezone(timezone) {
+    try {
+      // Test if the timezone is valid by creating a date with it
+      new Intl.DateTimeFormat('en', { timeZone: timezone });
+      return true;
+    } catch (error) {
+      return false;
     }
+  }
 
-    // Add default reminders
-    event.reminders = {
-      useDefault: false,
-      overrides: [
-        { method: 'popup', minutes: 15 },
-        { method: 'email', minutes: 60 }
-      ]
-    };
+  normalizeDate(date) {
+    if (!date) return null;
+    
+    // If already in YYYY-MM-DD format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return date;
+    }
+    
+    // Try to parse and format
+    try {
+      const dateObj = new Date(date);
+      if (!isNaN(dateObj.getTime())) {
+        return dateObj.toISOString().split('T')[0];
+      }
+    } catch (e) {
+      console.error('❌ Date parsing error:', e);
+    }
+    
+    return null;
+  }
 
-    return event;
+  normalizeTime(time) {
+    if (!time || time === 'Time TBD') return null;
+    
+    // If already in HH:MM format
+    if (/^\d{2}:\d{2}$/.test(time)) {
+      return time;
+    }
+    
+    // Parse various time formats
+    const timeMatch = time.match(/(\d{1,2}):?(\d{2})?\s*(am|pm|a\.?m\.?|p\.?m\.?)?/i);
+    
+    if (timeMatch) {
+      let hours = parseInt(timeMatch[1]);
+      const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+      const ampm = timeMatch[3] ? timeMatch[3].toLowerCase() : '';
+      
+      // Convert to 24-hour format
+      if (ampm.includes('pm') && hours !== 12) {
+        hours += 12;
+      } else if (ampm.includes('am') && hours === 12) {
+        hours = 0;
+      }
+      
+      // Validate hours and minutes
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        const result = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        console.log(`🕐 Normalized time: "${time}" → "${result}"`);
+        return result;
+      }
+    }
+    
+    console.error('❌ Time parsing failed for:', time);
+    return null;
+  }
+
+  addHour(time) {
+    if (!time || time === 'Time TBD') return null;
+    
+    try {
+      const normalizedTime = this.normalizeTime(time);
+      if (!normalizedTime) return null;
+      
+      const [hours, minutes] = normalizedTime.split(':').map(Number);
+      const newHours = (hours + 1) % 24;
+      const result = `${newHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      console.log(`⏰ Added 1 hour: "${normalizedTime}" → "${result}"`);
+      return result;
+    } catch (error) {
+      console.error('❌ Error adding hour to time:', error);
+      return time;
+    }
+  }
+
+  getNextDay(date) {
+    try {
+      const dateObj = new Date(date);
+      dateObj.setDate(dateObj.getDate() + 1);
+      return dateObj.toISOString().split('T')[0];
+    } catch (error) {
+      console.error('❌ Error calculating next day:', error);
+      return date;
+    }
   }
 
   buildDescription(eventData) {
     let description = eventData.description || '';
     
-    if (eventData.type) {
-      description += `\nType: ${eventData.type}`;
+    if (eventData.source) {
+      description += `\n\n--- Extracted by Email2Calendar ---\nSource: ${eventData.source}`;
+      if (eventData.confidence) {
+        description += `\nConfidence: ${(eventData.confidence * 100).toFixed(0)}%`;
+      }
     }
     
-    description += '\n\n--- Created by Email2Calendar Extension ---';
+    // Add timezone info for debugging
+    description += `\nTimezone: ${this.getUserTimezone()}`;
+    description += `\nCreated at: ${new Date().toISOString()}`;
     
     return description.trim();
   }
 
-  formatDateTime(date, time) {
-    // Normalize date to YYYY-MM-DD format
-    const normalizedDate = this.normalizeDate(date);
+  // Debug method to test timezone handling
+  async testTimezoneHandling() {
+    const testDate = '2025-05-30';
+    const testTime = '22:00'; // 10 PM
+    const timezone = this.getUserTimezone();
     
-    // Normalize time to HH:MM format
-    const normalizedTime = this.normalizeTime(time);
+    console.log('🧪 Testing timezone handling:');
+    console.log('  Date:', testDate);
+    console.log('  Time:', testTime);
+    console.log('  Timezone:', timezone);
     
-    return `${normalizedDate}T${normalizedTime}:00`;
-  }
-
-  normalizeDate(dateStr) {
-    if (!dateStr || dateStr === 'Date TBD') {
-      // Default to tomorrow
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      return tomorrow.toISOString().split('T')[0];
-    }
-
-    // Handle relative dates
-    if (dateStr.toLowerCase().includes('today')) {
-      return new Date().toISOString().split('T')[0];
-    }
+    const dateTimeString = this.createProperDateTimeString(testDate, testTime, timezone);
+    console.log('  Result:', dateTimeString);
     
-    if (dateStr.toLowerCase().includes('tomorrow')) {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      return tomorrow.toISOString().split('T')[0];
-    }
-
-    // Handle MM/DD/YYYY format
-    if (dateStr.includes('/')) {
-      const parts = dateStr.split('/');
-      if (parts.length === 3) {
-        const month = parts[0].padStart(2, '0');
-        const day = parts[1].padStart(2, '0');
-        let year = parts[2];
-        if (year.length === 2) year = '20' + year;
-        return `${year}-${month}-${day}`;
-      }
-    }
-
-    // Try to parse as Date
-    try {
-      const date = new Date(dateStr);
-      if (!isNaN(date.getTime())) {
-        return date.toISOString().split('T')[0];
-      }
-    } catch (e) {
-      console.warn('Could not parse date:', dateStr);
-    }
-
-    // Fallback to tomorrow
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    return tomorrow.toISOString().split('T')[0];
-  }
-
-  normalizeTime(timeStr) {
-    if (!timeStr || timeStr === 'Time TBD') {
-      return '09:00'; // Default to 9 AM
-    }
-
-    // Handle various time formats
-    const timeMatch = timeStr.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
-    if (timeMatch) {
-      let hours = parseInt(timeMatch[1]);
-      const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
-      const ampm = timeMatch[3]?.toLowerCase();
-      
-      if (ampm === 'pm' && hours !== 12) hours += 12;
-      if (ampm === 'am' && hours === 12) hours = 0;
-      
-      return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-    }
-
-    return '09:00'; // Default fallback
-  }
-
-  addOneHour(timeStr) {
-    try {
-      const normalizedTime = this.normalizeTime(timeStr);
-      const [hours, minutes] = normalizedTime.split(':').map(Number);
-      const newHours = (hours + 1) % 24;
-      return `${newHours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-    } catch (error) {
-      return '10:00'; // Default to 10 AM
-    }
-  }
-
-  getNextDay(dateStr) {
-    const date = new Date(dateStr);
-    date.setDate(date.getDate() + 1);
-    return date.toISOString().split('T')[0];
-  }
-
-  async makeAPIRequest(url, method, data, token, retryCount = 0) {
-    const options = {
-      method: method,
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      }
-    };
-
-    if (data && (method === 'POST' || method === 'PUT')) {
-      options.body = JSON.stringify(data);
-    }
-
-    try {
-      const response = await fetch(url, options);
-      
-      // Handle token expiration
-      if (response.status === 401 && retryCount === 0) {
-        console.log('Token expired, refreshing...');
-        await this.clearTokens();
-        this.accessToken = null;
-        const newToken = await this.getAccessToken();
-        return this.makeAPIRequest(url, method, data, newToken, 1);
-      }
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMessage = errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`;
-        throw new Error(errorMessage);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('API request failed:', error);
-      throw error;
-    }
+    // Test with different formats
+    const testTimes = ['10 pm', '10:00 PM', '22:00', '10.00 pm'];
+    testTimes.forEach(time => {
+      const normalized = this.normalizeTime(time);
+      console.log(`  "${time}" → "${normalized}"`);
+    });
   }
 }
 
-// Enhanced message handling
+// Enhanced background script message handling
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  console.log('📨 Background received message:', request.action);
+  console.log('🔔 Background script received message:', request);
   
   if (request.action === 'addToCalendar') {
     const calendarAPI = new CalendarAPI();
     
+    // Handle async operation properly
     (async () => {
       try {
+        console.log('🚀 Processing calendar addition request...');
+        
+        // Debug log the incoming event data
+        console.log('📝 Event data received:', request.event);
+        
         const result = await calendarAPI.addEvent(request.event);
-        console.log('✅ Event added successfully');
-        sendResponse(result);
+        console.log('✅ Calendar addition successful:', result);
+        
+        sendResponse({ 
+          success: true, 
+          eventId: result.eventId, 
+          event: result.event,
+          htmlLink: result.htmlLink 
+        });
       } catch (error) {
-        console.error('❌ Failed to add event:', error);
+        console.error('❌ Calendar addition failed:', error);
         sendResponse({ 
           success: false, 
           error: error.message 
@@ -369,36 +356,39 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     
     return true;
   }
-
-  if (request.action === 'clearAuth') {
+  
+  // Handle clear cache request
+  if (request.action === 'clearCache') {
     const calendarAPI = new CalendarAPI();
-    
-    (async () => {
-      try {
-        await calendarAPI.clearTokens();
-        sendResponse({ success: true });
-      } catch (error) {
-        sendResponse({ success: false, error: error.message });
-      }
-    })();
-    
+    calendarAPI.processedEvents.clear();
+    sendResponse({ success: true });
+    return true;
+  }
+  
+  // Debug timezone handling
+  if (request.action === 'testTimezone') {
+    const calendarAPI = new CalendarAPI();
+    calendarAPI.testTimezoneHandling();
+    sendResponse({ success: true });
     return true;
   }
 });
 
-// Handle extension installation/startup
-chrome.runtime.onInstalled.addListener(async () => {
-  console.log('📦 Email2Calendar extension installed');
+// Handle extension installation/update
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('📦 Email2Calendar extension installed/updated');
   
-  // Clear any cached tokens on fresh install
-  try {
-    await chrome.identity.clearAllCachedAuthTokens();
-    console.log('🗑️ Cleared cached auth tokens on install');
-  } catch (error) {
-    console.error('Error clearing tokens on install:', error);
-  }
+  // Clear any cached tokens on install
+  chrome.identity.clearAllCachedAuthTokens(() => {
+    console.log('🧹 Cleared cached auth tokens');
+  });
+  
+  // Test timezone detection on install
+  const calendarAPI = new CalendarAPI();
+  console.log('🌍 User timezone on install:', calendarAPI.getUserTimezone());
 });
 
-chrome.runtime.onStartup.addListener(() => {
-  console.log('🚀 Email2Calendar extension started');
-});
+// Add periodic cleanup for processed events
+setInterval(() => {
+  console.log('🧹 Periodic cleanup of processed events cache');
+}, 300000); // Every 5 minutes
