@@ -1,9 +1,12 @@
-// Complete popup.js with Enhanced NLP - No Dialog, Direct ML Addition
+// Enhanced popup.js with Duplicate Prevention and Advanced NLP
 document.addEventListener('DOMContentLoaded', function() {
   const scanButton = document.getElementById('scanCurrentEmail');
   const statusElement = document.getElementById('extensionStatus');
   const eventsFoundElement = document.getElementById('eventsFound');
   const eventsAddedElement = document.getElementById('eventsAdded');
+  
+  // Track processed events in this session to prevent duplicates
+  const sessionProcessedEvents = new Set();
 
   // Load saved stats
   loadStats();
@@ -193,7 +196,7 @@ document.addEventListener('DOMContentLoaded', function() {
             extractTime(sentence) {
               console.log('   ⏰ Extracting time from:', sentence);
               
-              // Use the SAME time extraction logic as your working background.js
+              // Use the SAME time extraction logic as background.js
               const timeMatch = sentence.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
               
               if (timeMatch) {
@@ -217,7 +220,6 @@ document.addEventListener('DOMContentLoaded', function() {
               console.log('   ❌ No time match found');
               return null;
             }
-
 
             extractLocation(sentence) {
               console.log('   📍 Extracting location...');
@@ -267,32 +269,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 return targetDate.toISOString().split('T')[0];
               }
               
-              return null;
-            }
-
-            normalizeTime(timeStr) {
-              console.log(`   🔧 Normalizing time: "${timeStr}"`);
-              
-              if (!timeStr || timeStr === 'Time TBD') {
-                return null;
-              }
-
-              // Use EXACT same logic as your working background.js
-              const timeMatch = timeStr.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
-              if (timeMatch) {
-                let hours = parseInt(timeMatch[1]);
-                const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
-                const ampm = timeMatch[3]?.toLowerCase();
-                
-                if (ampm === 'pm' && hours !== 12) hours += 12;
-                if (ampm === 'am' && hours === 12) hours = 0;
-                
-                const result = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-                console.log(`   Normalized result: "${result}"`);
-                return result;
-              }
-
-              console.log(`   ❌ Could not normalize: "${timeStr}"`);
               return null;
             }
 
@@ -450,32 +426,62 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // AUTOMATIC CALENDAR ADDITION
+  // AUTOMATIC CALENDAR ADDITION WITH DUPLICATE PREVENTION
   async function autoAddEventsToCalendar(events) {
     console.log('🤖 Auto-adding events to calendar...');
     
     let addedCount = 0;
     const results = [];
+    const processedKeys = new Set(); // Track processed events in this session
     
     for (const event of events) {
+      // Create unique key for this event
+      const eventKey = `${event.title}-${event.date}-${event.time}`.toLowerCase();
+      
+      // Skip if already processed in this session
+      if (processedKeys.has(eventKey)) {
+        console.log(`⚠️ Skipping duplicate in session: ${event.title}`);
+        continue;
+      }
+      
+      // Skip if already processed globally
+      if (sessionProcessedEvents.has(eventKey)) {
+        console.log(`⚠️ Skipping globally processed event: ${event.title}`);
+        continue;
+      }
+      
+      // Auto-add events with confidence > 0.7
       if (event.confidence >= 0.7) {
         try {
           console.log(`🚀 Adding event: ${event.title}`);
+          
+          // Mark as processed before attempting to add
+          processedKeys.add(eventKey);
+          sessionProcessedEvents.add(eventKey);
+          
           const result = await addEventDirectly(event);
           
           console.log(`✅ Successfully added: ${event.title}`);
           addedCount++;
           results.push({ event, success: true, result });
           
+          // Update event status
           event.status = 'added';
           
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 1000));
           
         } catch (error) {
           console.error(`❌ Failed to add ${event.title}:`, error);
           results.push({ event, success: false, error: error.message });
           
+          // Mark as failed but keep in processed set to prevent retries
           event.status = 'failed';
+          
+          // If it's a duplicate error, don't retry
+          if (error.message.includes('already exists') || error.message.includes('duplicate')) {
+            console.log(`⚠️ Duplicate detected for ${event.title}, marking as processed`);
+          }
         }
       } else {
         console.log(`⚠️ Skipping low-confidence event: ${event.title} (${(event.confidence * 100).toFixed(0)}%)`);
@@ -493,7 +499,7 @@ document.addEventListener('DOMContentLoaded', function() {
     return results;
   }
 
-  // DIRECT EVENT ADDITION
+  // DIRECT EVENT ADDITION WITH DUPLICATE PREVENTION
   async function addEventDirectly(eventData) {
     console.log('📅 Adding event directly to calendar:', eventData);
     
@@ -675,7 +681,7 @@ document.addEventListener('DOMContentLoaded', function() {
     return icons[status] || '❓';
   }
 
-  // EVENT DISPLAY AND MANAGEMENT
+  // EVENT DISPLAY AND MANAGEMENT WITH DUPLICATE PREVENTION
   async function updateRecentEventsWithActions(newEvents) {
     const result = await chrome.storage.local.get(['recentEvents']);
     let recentEvents = result.recentEvents || [];
@@ -726,15 +732,17 @@ document.addEventListener('DOMContentLoaded', function() {
       `;
     }).join('');
 
-    // Add event listeners
+    // Add event listeners with duplicate prevention
     eventsList.querySelectorAll('.add-event-btn').forEach(button => {
       button.addEventListener('click', async (e) => {
         const eventId = e.target.dataset.eventId;
         const event = events.find(e => e.id == eventId);
-        if (event) {
+        
+        if (event && !button.disabled) {
           try {
-            button.textContent = '⏳ Adding...';
+            // Disable button immediately to prevent double-clicks
             button.disabled = true;
+            button.textContent = '⏳ Adding...';
             
             await addEventDirectly(event);
             
@@ -742,14 +750,23 @@ document.addEventListener('DOMContentLoaded', function() {
             button.style.background = '#28a745';
             event.status = 'added';
             
+            // Add to session processed events
+            const eventKey = `${event.title}-${event.date}-${event.time}`.toLowerCase();
+            sessionProcessedEvents.add(eventKey);
+            
             showSuccess('Event added to calendar!');
             
+            // Refresh display after delay
             setTimeout(() => displayEventsWithActions(events), 1000);
             
           } catch (error) {
             button.textContent = '❌ Failed';
             button.style.background = '#dc3545';
-            button.disabled = false;
+            button.disabled = false; // Re-enable on failure only if not duplicate
+            
+            if (!error.message.includes('already exists') && !error.message.includes('duplicate')) {
+              button.disabled = false;
+            }
             
             showError('Failed to add event: ' + error.message);
           }
@@ -877,6 +894,195 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('openSettings').addEventListener('click', () => {
     chrome.runtime.openOptionsPage();
   });
+
+  // CLEAR CACHE FUNCTION
+  async function clearProcessedEventsCache() {
+    try {
+      // Clear local session cache
+      sessionProcessedEvents.clear();
+      
+      // Clear background script cache
+      await new Promise((resolve) => {
+        chrome.runtime.sendMessage({ action: 'clearCache' }, (response) => {
+          console.log('Cache clear response:', response);
+          resolve(response);
+        });
+      });
+      
+      showSuccess('Processed events cache cleared');
+      console.log('✅ All caches cleared');
+      
+    } catch (error) {
+      console.error('❌ Failed to clear cache:', error);
+      showError('Failed to clear cache');
+    }
+  }
+
+  // TEST FUNCTIONS
+  async function testGoogleCalendarTimeSlot() {
+    console.log('🧪 Testing Google Calendar time slot placement...');
+    
+    const testEvent = {
+      title: 'Test Dinner Date - Time Slot Check',
+      date: new Date().toISOString().split('T')[0],
+      startTime: '22:00',
+      endTime: '23:00',   
+      location: 'Cinnamon Grand',
+      description: 'Test event to verify correct time slot placement - should appear at 10 PM',
+      type: 'social',
+      source: 'manual_test',
+      confidence: 1.0
+    };
+    
+    console.log('📅 Test event data:', testEvent);
+    console.log('🌍 Your timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
+    
+    try {
+      const result = await addEventDirectly(testEvent);
+      
+      console.log('✅ SUCCESS! Event created!');
+      console.log('📝 Result:', result);
+      console.log('📍 Check your calendar - it should appear at 10:00 PM today');
+      
+      showSuccess('✅ Test event created at 10 PM! Check your calendar.');
+      
+      return result;
+      
+    } catch (error) {
+      console.error('❌ FAILED to create event:', error);
+      showError('❌ Test failed: ' + error.message);
+      throw error;
+    }
+  }
+
+  async function testDinnerEmail() {
+    console.log('🧠 Testing dinner email extraction...');
+    
+    const testEmailText = "Hello Dear,We have a dinner date tonight at 10 pm at Cinnamon Grand.Kind Regards,Danujan S.";
+    
+    console.log('📧 Test email:', testEmailText);
+    
+    const sentences = testEmailText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 10);
+    console.log('📝 Sentences:', sentences);
+    
+    const targetSentence = sentences.find(s => s.toLowerCase().includes('dinner') && s.toLowerCase().includes('tonight'));
+    console.log('🎯 Target sentence:', targetSentence);
+    
+    if (targetSentence) {
+      const timeMatch = targetSentence.match(/(\d{1,2})\s*(pm|am)/i);
+      const locationMatch = targetSentence.match(/at\s+([A-Z][a-zA-Z\s&]{2,30})/);
+      const dateMatch = targetSentence.match(/tonight/i);
+      
+      console.log('⏰ Time extracted:', timeMatch ? timeMatch[0] : 'none');
+      console.log('📍 Location extracted:', locationMatch ? locationMatch[1] : 'none');
+      console.log('📅 Date extracted:', dateMatch ? 'tonight (today)' : 'none');
+      
+      if (timeMatch && locationMatch && dateMatch) {
+        let hours = parseInt(timeMatch[1]);
+        const ampm = timeMatch[2].toLowerCase();
+        
+        if (ampm === 'pm' && hours !== 12) {
+          hours += 12;
+        } else if (ampm === 'am' && hours === 12) {
+          hours = 0;
+        }
+        
+        const normalizedTime = `${hours.toString().padStart(2, '0')}:00`;
+        console.log('🕐 Normalized time:', normalizedTime);
+        
+        const extractedEvent = {
+          title: 'Dinner Date',
+          date: new Date().toISOString().split('T')[0],
+          startTime: normalizedTime,
+          endTime: `${((hours + 1) % 24).toString().padStart(2, '0')}:00`,
+          location: locationMatch[1],
+          description: targetSentence,
+          type: 'social',
+          source: 'nlp_test',
+          confidence: 0.9
+        };
+        
+        console.log('✅ Extracted event:', extractedEvent);
+        
+        try {
+          const result = await addEventDirectly(extractedEvent);
+          console.log('🎉 Dinner date added to calendar!');
+          showSuccess('🎉 Dinner date extracted and added to calendar!');
+          return result;
+        } catch (error) {
+          console.error('❌ Failed to add dinner date:', error);
+          showError('❌ Failed to add dinner date: ' + error.message);
+        }
+      }
+    }
+  }
+
+  function debugTimeParsing() {
+    console.log('🔧 Debug: Testing time parsing edge cases...');
+    
+    const testCases = [
+      '10 pm',
+      '10:00 PM', 
+      '10.00 pm',
+      '22:00',
+      '10pm',
+      '10 PM',
+      '10:30 pm'
+    ];
+    
+    testCases.forEach(timeStr => {
+      const result = formatTimeForCalendar(timeStr);
+      console.log(`  "${timeStr}" → "${result}"`);
+    });
+  }
+
+  // Add test buttons to the popup interface
+  function addTestButtons() {
+    console.log('🔧 Adding test buttons to popup...');
+    
+    const actionsSection = document.querySelector('.actions-section');
+    if (actionsSection) {
+      // Test time slot button
+      const testTimeButton = document.createElement('button');
+      testTimeButton.className = 'action-btn';
+      testTimeButton.innerHTML = '🧪 Test 10 PM Event';
+      testTimeButton.onclick = () => {
+        testGoogleCalendarTimeSlot().catch(error => {
+          console.error('Test failed:', error);
+        });
+      };
+      actionsSection.appendChild(testTimeButton);
+      
+      // Test dinner email button
+      const testEmailButton = document.createElement('button');
+      testEmailButton.className = 'action-btn';
+      testEmailButton.innerHTML = '🍽️ Test Dinner Email';
+      testEmailButton.onclick = () => {
+        testDinnerEmail().catch(error => {
+          console.error('Dinner test failed:', error);
+        });
+      };
+      actionsSection.appendChild(testEmailButton);
+      
+      // Debug time parsing button
+      const debugButton = document.createElement('button');
+      debugButton.className = 'action-btn';
+      debugButton.innerHTML = '🔧 Debug Time Parsing';
+      debugButton.onclick = debugTimeParsing;
+      actionsSection.appendChild(debugButton);
+      
+      // Clear cache button
+      const clearCacheButton = document.createElement('button');
+      clearCacheButton.className = 'action-btn';
+      clearCacheButton.innerHTML = '🧹 Clear Cache';
+      clearCacheButton.onclick = clearProcessedEventsCache;
+      actionsSection.appendChild(clearCacheButton);
+      
+      console.log('✅ Test buttons added successfully');
+    } else {
+      console.error('❌ Could not find actions section to add test buttons');
+    }
+  }
 
   // DEBUG FUNCTIONS (can be removed in production)
   window.debugCalendarIntegration = async function() {
@@ -1013,185 +1219,25 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   };
 
-  console.log('✅ Popup script loaded successfully');
-  console.log('🔧 Debug functions available: debugCalendarIntegration(), testMessagePassing(), clearAuthCache()');
-
-  // Add this to the END of your existing popup.js file (before the final });)
-
-  // Test function that works within the extension popup
-  async function testGoogleCalendarTimeSlot() {
-    console.log('🧪 Testing Google Calendar time slot placement...');
-    
-    // Test event for 10 PM today
-    const testEvent = {
-      title: 'Test Dinner Date - Time Slot Check',
-      date: new Date().toISOString().split('T')[0], // Today
-      startTime: '22:00', // 10 PM (correctly formatted)
-      endTime: '23:00',   // 11 PM  
-      location: 'Cinnamon Grand',
-      description: 'Test event to verify correct time slot placement - should appear at 10 PM',
-      type: 'social',
-      source: 'manual_test',
-      confidence: 1.0
-    };
-    
-    console.log('📅 Test event data:', testEvent);
-    console.log('🌍 Your timezone:', Intl.DateTimeFormat().resolvedOptions().timeZone);
-    
-    try {
-      // Use the existing addEventDirectly function
-      const result = await addEventDirectly(testEvent);
-      
-      console.log('✅ SUCCESS! Event created!');
-      console.log('📝 Result:', result);
-      console.log('📍 Check your calendar - it should appear at 10:00 PM today');
-      
-      showSuccess('✅ Test event created at 10 PM! Check your calendar.');
-      
-      return result;
-      
-    } catch (error) {
-      console.error('❌ FAILED to create event:', error);
-      showError('❌ Test failed: ' + error.message);
-      throw error;
-    }
-  }
-
-  // Test the NLP extraction with your specific email
-  async function testDinnerEmail() {
-    console.log('🧠 Testing dinner email extraction...');
-    
-    const testEmailText = "Hello Dear,We have a dinner date tonight at 10 pm at Cinnamon Grand.Kind Regards,Danujan S.";
-    
-    console.log('📧 Test email:', testEmailText);
-    
-    // Simulate the NLP extraction
-    const sentences = testEmailText.split(/[.!?]+/).map(s => s.trim()).filter(s => s.length > 10);
-    console.log('📝 Sentences:', sentences);
-    
-    const targetSentence = sentences.find(s => s.toLowerCase().includes('dinner') && s.toLowerCase().includes('tonight'));
-    console.log('🎯 Target sentence:', targetSentence);
-    
-    if (targetSentence) {
-      // Extract components
-      const timeMatch = targetSentence.match(/(\d{1,2})\s*(pm|am)/i);
-      const locationMatch = targetSentence.match(/at\s+([A-Z][a-zA-Z\s&]{2,30})/);
-      const dateMatch = targetSentence.match(/tonight/i);
-      
-      console.log('⏰ Time extracted:', timeMatch ? timeMatch[0] : 'none');
-      console.log('📍 Location extracted:', locationMatch ? locationMatch[1] : 'none');
-      console.log('📅 Date extracted:', dateMatch ? 'tonight (today)' : 'none');
-      
-      if (timeMatch && locationMatch && dateMatch) {
-        // Convert time to 24-hour format
-        let hours = parseInt(timeMatch[1]);
-        const ampm = timeMatch[2].toLowerCase();
-        
-        if (ampm === 'pm' && hours !== 12) {
-          hours += 12;
-        } else if (ampm === 'am' && hours === 12) {
-          hours = 0;
-        }
-        
-        const normalizedTime = `${hours.toString().padStart(2, '0')}:00`;
-        console.log('🕐 Normalized time:', normalizedTime);
-        
-        const extractedEvent = {
-          title: 'Dinner Date',
-          date: new Date().toISOString().split('T')[0],
-          startTime: normalizedTime,
-          endTime: `${((hours + 1) % 24).toString().padStart(2, '0')}:00`,
-          location: locationMatch[1],
-          description: targetSentence,
-          type: 'social',
-          source: 'nlp_test',
-          confidence: 0.9
-        };
-        
-        console.log('✅ Extracted event:', extractedEvent);
-        
-        // Actually create the event
-        try {
-          const result = await addEventDirectly(extractedEvent);
-          console.log('🎉 Dinner date added to calendar!');
-          showSuccess('🎉 Dinner date extracted and added to calendar!');
-          return result;
-        } catch (error) {
-          console.error('❌ Failed to add dinner date:', error);
-          showError('❌ Failed to add dinner date: ' + error.message);
-        }
-      }
-    }
-  }
-
-  // Debug time parsing specifically
-  function debugTimeParsing() {
-    console.log('🔧 Debug: Testing time parsing edge cases...');
-    
-    const testCases = [
-      '10 pm',
-      '10:00 PM',
-      '10.00 pm',
-      '22:00',
-      '10pm',
-      '10 PM',
-      '10:30 pm'
-    ];
-    
-    testCases.forEach(timeStr => {
-      const result = formatTimeForCalendar(timeStr);
-      console.log(`  "${timeStr}" → "${result}"`);
-    });
-  }
-
-  // Add test buttons to the popup interface
-  function addTestButtons() {
-    console.log('🔧 Adding test buttons to popup...');
-    
-    const actionsSection = document.querySelector('.actions-section');
-    if (actionsSection) {
-      // Test time slot button
-      const testTimeButton = document.createElement('button');
-      testTimeButton.className = 'action-btn';
-      testTimeButton.innerHTML = '🧪 Test 10 PM Event';
-      testTimeButton.onclick = () => {
-        testGoogleCalendarTimeSlot().catch(error => {
-          console.error('Test failed:', error);
-        });
-      };
-      actionsSection.appendChild(testTimeButton);
-      
-      // Test dinner email button
-      const testEmailButton = document.createElement('button');
-      testEmailButton.className = 'action-btn';
-      testEmailButton.innerHTML = '🍽️ Test Dinner Email';
-      testEmailButton.onclick = () => {
-        testDinnerEmail().catch(error => {
-          console.error('Dinner test failed:', error);
-        });
-      };
-      actionsSection.appendChild(testEmailButton);
-      
-      // Debug time parsing button
-      const debugButton = document.createElement('button');
-      debugButton.className = 'action-btn';
-      debugButton.innerHTML = '🔧 Debug Time Parsing';
-      debugButton.onclick = debugTimeParsing;
-      actionsSection.appendChild(debugButton);
-      
-      console.log('✅ Test buttons added successfully');
-    } else {
-      console.error('❌ Could not find actions section to add test buttons');
-    }
-  }
+  // Expose test functions globally
+  window.testGoogleCalendarTimeSlot = testGoogleCalendarTimeSlot;
+  window.testDinnerEmail = testDinnerEmail;
+  window.debugTimeParsing = debugTimeParsing;
+  window.clearProcessedEventsCache = clearProcessedEventsCache;
 
   // Add test buttons when popup loads
   setTimeout(() => {
     addTestButtons();
     console.log('🔧 Test functions loaded in popup context');
-    console.log('📍 Use the new test buttons in the popup, or run:');
+    console.log('📍 Available functions:');
     console.log('  - testGoogleCalendarTimeSlot()');
     console.log('  - testDinnerEmail()');
     console.log('  - debugTimeParsing()');
+    console.log('  - clearProcessedEventsCache()');
+    console.log('  - debugCalendarIntegration()');
+    console.log('  - testMessagePassing()');
+    console.log('  - clearAuthCache()');
   }, 1000);
+
+  console.log('✅ Enhanced Popup script loaded successfully with duplicate prevention');
 });

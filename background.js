@@ -1,11 +1,56 @@
 class CalendarAPI {
   constructor() {
     this.accessToken = null;
+    this.isAuthenticating = false;
     this.processedEvents = new Set(); // Track processed events to prevent duplicates
+    this.pendingRequests = new Map(); // Prevent rapid duplicate requests
+  }
+
+  // Create unique key for event identification
+  createEventKey(eventData) {
+    const key = `${eventData.title}-${eventData.date}-${eventData.startTime}-${eventData.location || 'no-location'}`;
+    return key.toLowerCase().replace(/\s+/g, '-');
+  }
+
+  // Check for duplicate events
+  isDuplicate(eventData) {
+    const eventKey = this.createEventKey(eventData);
+    console.log('🔍 Checking for duplicate with key:', eventKey);
+    
+    if (this.processedEvents.has(eventKey)) {
+      console.log('⚠️ Duplicate event detected, skipping');
+      return true;
+    }
+    
+    if (this.pendingRequests.has(eventKey)) {
+      console.log('⚠️ Event currently being processed, skipping');
+      return true;
+    }
+    
+    return false;
+  }
+
+  // Clean up old pending requests
+  cleanupPendingRequests() {
+    const now = Date.now();
+    for (const [key, timestamp] of this.pendingRequests.entries()) {
+      if (now - timestamp > 30000) { // 30 seconds timeout
+        this.pendingRequests.delete(key);
+      }
+    }
   }
 
   async getAccessToken() {
+    if (this.isAuthenticating) {
+      // Wait for ongoing authentication
+      while (this.isAuthenticating) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      return this.accessToken;
+    }
+
     if (!this.accessToken) {
+      this.isAuthenticating = true;
       try {
         const result = await chrome.identity.getAuthToken({ 
           interactive: true,
@@ -19,6 +64,8 @@ class CalendarAPI {
       } catch (error) {
         console.error('❌ Authentication failed:', error);
         throw new Error(`Authentication failed: ${error.message}`);
+      } finally {
+        this.isAuthenticating = false;
       }
     }
     return this.accessToken;
@@ -27,20 +74,68 @@ class CalendarAPI {
   async addEvent(eventData) {
     console.log('📅 Adding event with data:', eventData);
     
-    // Create unique event identifier to prevent duplicates
-    const eventKey = `${eventData.title}-${eventData.date}-${eventData.startTime}`;
-    if (this.processedEvents.has(eventKey)) {
-      console.log('⚠️ Event already processed, skipping duplicate');
-      return { success: false, error: 'Event already exists' };
-    }
-    
-    const token = await this.getAccessToken();
-    
-    // Validate required fields
+    // Validate input
     if (!eventData.title || !eventData.date) {
-      throw new Error('Event must have title and date');
+      throw new Error('Missing required event data (title and date)');
     }
 
+    // CHECK FOR DUPLICATES FIRST
+    if (this.isDuplicate(eventData)) {
+      return {
+        success: false,
+        error: 'Event already exists or is being processed'
+      };
+    }
+
+    const eventKey = this.createEventKey(eventData);
+    
+    try {
+      // Mark as pending to prevent rapid duplicates
+      this.pendingRequests.set(eventKey, Date.now());
+      console.log('🔄 Processing event with key:', eventKey);
+
+      const token = await this.getAccessToken();
+      
+      // Create properly formatted event
+      const event = this.formatEventForAPI(eventData);
+      console.log('📝 Formatted event:', event);
+
+      const response = await this.makeAPIRequest(
+        'https://www.googleapis.com/calendar/v3/calendars/primary/events',
+        'POST',
+        event,
+        token
+      );
+
+      console.log('✅ Event created successfully:', response);
+      
+      // Mark as processed to prevent future duplicates
+      this.processedEvents.add(eventKey);
+      
+      // Clean up old processed events (keep only last 100)
+      if (this.processedEvents.size > 100) {
+        const keys = Array.from(this.processedEvents);
+        this.processedEvents.clear();
+        keys.slice(-50).forEach(key => this.processedEvents.add(key));
+      }
+      
+      return {
+        success: true,
+        eventId: response.id,
+        htmlLink: response.htmlLink,
+        event: response
+      };
+      
+    } catch (error) {
+      console.error('❌ Failed to create event:', error);
+      throw error;
+    } finally {
+      // Remove from pending requests
+      this.pendingRequests.delete(eventKey);
+    }
+  }
+
+  formatEventForAPI(eventData) {
     // Create event object with proper time handling
     const event = {
       summary: eventData.title || 'Event',
@@ -85,49 +180,82 @@ class CalendarAPI {
       });
     }
 
-    try {
-      console.log('🚀 Sending to Google Calendar API:', event);
-      
-      const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(event)
-      });
+    return event;
+  }
 
+  async makeAPIRequest(url, method, data, token, attempt = 1) {
+    const maxRetries = 3;
+    const retryDelay = 1000;
+
+    const options = {
+      method: method,
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    };
+
+    if (data && (method === 'POST' || method === 'PUT')) {
+      options.body = JSON.stringify(data);
+    }
+
+    try {
+      console.log(`🚀 Making API request (attempt ${attempt}):`, url);
+      
+      const response = await fetch(url, options);
+      
       console.log('📡 API Response status:', response.status);
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error('❌ Calendar API error:', errorData);
-        throw new Error(`Calendar API error: ${response.status} - ${errorData.error?.message || 'Unknown error'}`);
+      if (response.status === 401 && attempt === 1) {
+        // Token expired, refresh and retry
+        console.log('🔄 Token expired, refreshing...');
+        await this.refreshToken();
+        return this.makeAPIRequest(url, method, data, this.accessToken, 2);
       }
 
-      const result = await response.json();
-      console.log('✅ Event created successfully:', result);
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`API Error ${response.status}: ${errorData.error?.message || response.statusText}`);
+      }
+
+      if (method === 'DELETE') {
+        return { success: true };
+      }
+
+      return await response.json();
       
-      // Mark event as processed to prevent duplicates
-      this.processedEvents.add(eventKey);
+    } catch (error) {
+      console.error(`❌ API request failed (attempt ${attempt}):`, error);
       
-      // Clean up old processed events (keep only last 100)
-      if (this.processedEvents.size > 100) {
-        const entries = Array.from(this.processedEvents);
-        this.processedEvents.clear();
-        entries.slice(-50).forEach(entry => this.processedEvents.add(entry));
+      if (attempt < maxRetries && this.isRetryableError(error)) {
+        console.log(`🔄 Retrying in ${retryDelay * attempt}ms...`);
+        await this.delay(retryDelay * attempt);
+        return this.makeAPIRequest(url, method, data, token, attempt + 1);
       }
       
-      return {
-        success: true,
-        eventId: result.id,
-        htmlLink: result.htmlLink,
-        event: result
-      };
-    } catch (error) {
-      console.error('❌ Error adding event:', error);
       throw error;
     }
+  }
+
+  async refreshToken() {
+    try {
+      await chrome.identity.removeCachedAuthToken({ token: this.accessToken });
+      this.accessToken = null;
+      return await this.getAccessToken();
+    } catch (error) {
+      throw new Error(`Token refresh failed: ${error.message}`);
+    }
+  }
+
+  isRetryableError(error) {
+    return error.message.includes('503') || 
+           error.message.includes('429') || 
+           error.message.includes('network') ||
+           error.message.includes('fetch');
+  }
+
+  delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   // CRITICAL FIX: Proper datetime string creation with timezone
@@ -321,15 +449,25 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         // Debug log the incoming event data
         console.log('📝 Event data received:', request.event);
         
-        const result = await calendarAPI.addEvent(request.event);
-        console.log('✅ Calendar addition successful:', result);
+        // Clean up pending requests periodically
+        calendarAPI.cleanupPendingRequests();
         
-        sendResponse({ 
-          success: true, 
-          eventId: result.eventId, 
-          event: result.event,
-          htmlLink: result.htmlLink 
-        });
+        const result = await calendarAPI.addEvent(request.event);
+        console.log('✅ Calendar addition result:', result);
+        
+        if (result.success) {
+          sendResponse({ 
+            success: true, 
+            eventId: result.eventId, 
+            event: result.event,
+            htmlLink: result.htmlLink 
+          });
+        } else {
+          sendResponse({ 
+            success: false, 
+            error: result.error 
+          });
+        }
       } catch (error) {
         console.error('❌ Calendar addition failed:', error);
         sendResponse({ 
@@ -361,7 +499,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'clearCache') {
     const calendarAPI = new CalendarAPI();
     calendarAPI.processedEvents.clear();
-    sendResponse({ success: true });
+    calendarAPI.pendingRequests.clear();
+    sendResponse({ success: true, message: 'Cache cleared' });
     return true;
   }
   
@@ -388,7 +527,8 @@ chrome.runtime.onInstalled.addListener(() => {
   console.log('🌍 User timezone on install:', calendarAPI.getUserTimezone());
 });
 
-// Add periodic cleanup for processed events
+// Add periodic cleanup for processed events and pending requests
 setInterval(() => {
   console.log('🧹 Periodic cleanup of processed events cache');
+  // Cleanup will be handled by individual CalendarAPI instances
 }, 300000); // Every 5 minutes
