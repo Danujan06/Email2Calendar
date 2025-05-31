@@ -692,18 +692,46 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // EVENT DISPLAY AND MANAGEMENT WITH DUPLICATE PREVENTION
   async function updateRecentEventsWithActions(newEvents) {
-    const result = await chrome.storage.local.get(['recentEvents']);
+    const result = await chrome.storage.local.get(['recentEvents', 'deletedEvents']);
     let recentEvents = result.recentEvents || [];
+    const deletedEvents = result.deletedEvents || [];
     
-    newEvents.forEach(event => {
+    // Create a Set of deleted event keys for fast lookup
+    const deletedEventKeys = new Set(deletedEvents.map(deleted => deleted.key));
+    
+    // Filter out events that have been previously deleted
+    const filteredNewEvents = newEvents.filter(event => {
+      const eventKey = `${event.title}-${event.date}-${event.time}`.toLowerCase();
+      const isDeleted = deletedEventKeys.has(eventKey);
+      
+      if (isDeleted) {
+        console.log(`🚫 Skipping previously deleted event: ${event.title}`);
+      }
+      
+      return !isDeleted;
+    });
+    
+    // Add timestamps and status to new events
+    filteredNewEvents.forEach(event => {
       event.timestamp = new Date().toISOString();
       event.status = 'detected';
     });
     
-    recentEvents = [...newEvents, ...recentEvents].slice(0, 10);
+    // Merge with existing events, avoiding duplicates
+    const existingEventKeys = new Set(recentEvents.map(event => 
+      `${event.title}-${event.date}-${event.time}`.toLowerCase()
+    ));
+    
+    const uniqueNewEvents = filteredNewEvents.filter(event => {
+      const eventKey = `${event.title}-${event.date}-${event.time}`.toLowerCase();
+      return !existingEventKeys.has(eventKey);
+    });
+    
+    recentEvents = [...uniqueNewEvents, ...recentEvents].slice(0, 10);
     await chrome.storage.local.set({ recentEvents });
     
-    displayEventsWithActions(newEvents);
+    console.log(`📝 Showing ${filteredNewEvents.length} events (${newEvents.length - filteredNewEvents.length} previously deleted)`);
+    displayEventsWithActions(filteredNewEvents);
   }
 
   function displayEventsWithActions(events) {
@@ -794,12 +822,42 @@ document.addEventListener('DOMContentLoaded', function() {
 
   async function deleteEvent(eventId, eventElement) {
     try {
-      const result = await chrome.storage.local.get(['recentEvents']);
+      // Remove from recent events storage
+      const result = await chrome.storage.local.get(['recentEvents', 'deletedEvents']);
       let recentEvents = result.recentEvents || [];
+      let deletedEvents = result.deletedEvents || [];
       
+      // Find the event being deleted
+      const deletedEvent = recentEvents.find(event => event.id === eventId);
+      
+      // Remove from recent events
       recentEvents = recentEvents.filter(event => event.id !== eventId);
-      await chrome.storage.local.set({ recentEvents });
       
+      // Add to deleted events list to prevent showing again
+      if (deletedEvent) {
+        const deletedEventKey = `${deletedEvent.title}-${deletedEvent.date}-${deletedEvent.time}`.toLowerCase();
+        deletedEvents.push({
+          id: eventId,
+          key: deletedEventKey,
+          deletedAt: new Date().toISOString(),
+          originalEvent: deletedEvent
+        });
+        
+        // Keep only last 50 deleted events to prevent storage bloat
+        if (deletedEvents.length > 50) {
+          deletedEvents = deletedEvents.slice(-50);
+        }
+        
+        console.log(`🗑️ Event marked as deleted: ${deletedEventKey}`);
+      }
+      
+      // Save updated storage
+      await chrome.storage.local.set({ 
+        recentEvents, 
+        deletedEvents 
+      });
+      
+      // Animate removal
       eventElement.style.transform = 'translateX(100%)';
       eventElement.style.opacity = '0';
       
@@ -811,7 +869,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       }, 300);
       
-      showSuccess('Event deleted');
+      showSuccess('Event deleted and won\'t appear again');
       
     } catch (error) {
       console.error('❌ Failed to delete event:', error);
@@ -856,13 +914,35 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   async function loadRecentEvents() {
-    const result = await chrome.storage.local.get(['recentEvents']);
+    const result = await chrome.storage.local.get(['recentEvents', 'deletedEvents']);
     const recentEvents = result.recentEvents || [];
+    const deletedEvents = result.deletedEvents || [];
     
-    if (recentEvents.length === 0) {
+    // Create a Set of deleted event keys for fast lookup
+    const deletedEventKeys = new Set(deletedEvents.map(deleted => deleted.key));
+    
+    // Filter out any events that have been deleted
+    const activeEvents = recentEvents.filter(event => {
+      const eventKey = `${event.title}-${event.date}-${event.time}`.toLowerCase();
+      const isDeleted = deletedEventKeys.has(eventKey);
+      
+      if (isDeleted) {
+        console.log(`🚫 Filtering out deleted event: ${event.title}`);
+      }
+      
+      return !isDeleted;
+    });
+    
+    // Update storage with filtered events
+    if (activeEvents.length !== recentEvents.length) {
+      await chrome.storage.local.set({ recentEvents: activeEvents });
+      console.log(`🧹 Cleaned up ${recentEvents.length - activeEvents.length} deleted events from storage`);
+    }
+    
+    if (activeEvents.length === 0) {
       document.getElementById('recentEventsList').innerHTML = '<div class="no-events">No recent events detected</div>';
     } else {
-      displayEventsWithActions(recentEvents.slice(0, 5));
+      displayEventsWithActions(activeEvents.slice(0, 5));
     }
   }
 
@@ -937,6 +1017,39 @@ document.addEventListener('DOMContentLoaded', function() {
     } catch (error) {
       console.error('❌ Failed to clear cache:', error);
       showError('Failed to clear cache');
+    }
+  }
+
+  // Clear deleted events history
+  async function clearDeletedEventsHistory() {
+    try {
+      await chrome.storage.local.set({ deletedEvents: [] });
+      showSuccess('Deleted events history cleared');
+      console.log('🗑️ Deleted events history cleared - previously deleted events may reappear');
+    } catch (error) {
+      console.error('❌ Failed to clear deleted events history:', error);
+      showError('Failed to clear deleted events history');
+    }
+  }
+
+  // View deleted events (for debugging)
+  async function viewDeletedEvents() {
+    try {
+      const result = await chrome.storage.local.get(['deletedEvents']);
+      const deletedEvents = result.deletedEvents || [];
+      
+      console.log(`🗑️ ${deletedEvents.length} deleted events:`, deletedEvents);
+      
+      deletedEvents.forEach((deleted, index) => {
+        console.log(`${index + 1}. ${deleted.originalEvent?.title} (${deleted.deletedAt})`);
+      });
+      
+      if (deletedEvents.length === 0) {
+        console.log('No deleted events in history');
+      }
+      
+    } catch (error) {
+      console.error('❌ Failed to view deleted events:', error);
     }
   }
 
