@@ -15,7 +15,7 @@
       <div class="status-section">
         <div class="status-item">
           <span class="status-label">Status:</span>
-          <span id="extensionStatus" class="status-value">Active</span>
+          <span id="extensionStatus" class="status-value">Loading...</span>
         </div>
         <div class="status-item">
           <span class="status-label">Events Found:</span>
@@ -28,26 +28,28 @@
       </div>
 
       <div class="actions-section">
-        <div class="actions-grid">
-          <button id="scanCurrentEmail" class="action-btn primary">
-            <span class="btn-icon">📧</span>
-            <span class="btn-label">Scan</span>
-          </button>
-          <button id="toggleAutoDetection" class="action-btn">
-            <span class="btn-icon">🔄</span>
-            <span class="btn-label">Toggle</span>
-          </button>
-          <button id="openSettings" class="action-btn">
-            <span class="btn-icon">⚙️</span>
-            <span class="btn-label">Settings</span>
-          </button>
-        </div>
+        <button id="scanCurrentEmail" class="action-btn primary">
+          <span class="btn-icon">📧</span>
+          <span class="btn-label">Scan Current Email</span>
+        </button>
+        <button id="toggleAutoDetection" class="action-btn">
+          <span class="btn-icon">🔄</span>
+          <span class="btn-text">Auto-Detection</span>
+        </button>
+        <button id="openSettings" class="action-btn">
+          <span class="btn-icon">⚙️</span>
+          <span class="btn-text">Settings</span>
+        </button>
       </div>
 
       <div class="recent-events">
         <h3>Recent Detected Events</h3>
         <div id="recentEventsList" class="events-list">
-          <!-- Dynamically populated -->
+          <div class="no-events">
+            <div class="no-events-icon">📭</div>
+            <div class="no-events-message">No recent events detected</div>
+            <div class="no-events-hint">Scan an email to detect events</div>
+          </div>
         </div>
       </div>
     </div>
@@ -58,6 +60,19 @@
     </div>
   </div>
   
-  <script src="popup.js"></script>
+  <!-- Load all modules in the correct order -->
+  
+  <!-- 1. Base classes first -->
+  <script src="modules/extractors/basic-extractor.js"></script>
+  <script src="modules/extractors/enhanced-nlp-extractor.js"></script>
+  
+  <!-- 2. Core modules -->
+  <script src="modules/email-scanner.js"></script>
+  <script src="modules/calendar-integrator.js"></script>
+  <script src="modules/storage-manager.js"></script>
+  <script src="modules/ui-manager.js"></script>
+  
+  <!-- 3. Main controller last -->
+  <script src="popup-controller.js"></script>
 </body>
 </html>
