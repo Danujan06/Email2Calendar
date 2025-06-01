@@ -64,7 +64,12 @@ class BasicEventExtractor {
     ];
 
     // Enhanced time patterns
+    // Enhanced time patterns with specific due date patterns
     this.timePatterns = [
+      // Due/deadline specific patterns - HIGHEST PRIORITY
+      /due\s*:?\s*.*?(\d{1,2}):(\d{2})\s*(am|pm|a\.?m\.?|p\.?m\.?)/gi,
+      /deadline\s*:?\s*.*?(\d{1,2}):(\d{2})\s*(am|pm|a\.?m\.?|p\.?m\.?)/gi,
+      
       // Standard time formats
       /\b(\d{1,2}):(\d{2})\s*(am|pm|a\.?m\.?|p\.?m\.?)\b/gi,
       /\b(\d{1,2})\s*(am|pm|a\.?m\.?|p\.?m\.?)\b/gi,
@@ -171,39 +176,151 @@ class BasicEventExtractor {
   }
 
   /**
-   * Main extraction method
+   * Main extraction method - ENHANCED WITH BETTER DUPLICATE PREVENTION
    */
   async extractEvents(emailText, subject = '') {
-    console.log('🔍 Starting basic pattern-based extraction...');
+    console.log('🔍 Starting enhanced basic pattern-based extraction...');
+    console.log(`📧 Email text length: ${emailText.length}`);
+    console.log(`📧 Subject: "${subject}"`);
     
     const events = [];
     const processedText = this.preprocessText(emailText);
+    
+    // First, try to extract from the ENTIRE text as one unit for assignments
+    if (this.isAssignmentEmail(processedText, subject)) {
+      console.log('📚 Detected assignment email, processing as single unit');
+      
+      const assignmentEvent = this.extractAssignmentEvent(processedText, subject);
+      if (assignmentEvent) {
+        console.log('✅ Successfully extracted assignment event:', assignmentEvent);
+        return [assignmentEvent]; // Return single assignment event
+      }
+    }
+    
+    // Fallback to sentence-by-sentence processing
     const sentences = this.splitIntoSentences(processedText);
+    console.log(`📝 Processing ${sentences.length} sentences`);
+    
+    // Track processed content to avoid duplicates
+    const processedTitles = new Set();
     
     // Process each sentence
     for (const [index, sentence] of sentences.entries()) {
       console.log(`📝 Processing sentence ${index + 1}: "${sentence.substring(0, 100)}..."`);
       
       if (this.containsEventKeywords(sentence)) {
+        console.log(`✅ Sentence ${index + 1} contains event keywords`);
+        
         const extractedEvents = this.extractFromSentence(sentence, subject, processedText);
-        events.push(...extractedEvents);
+        
+        // Filter out events with duplicate titles
+        const uniqueEvents = extractedEvents.filter(event => {
+          const titleKey = event.title.toLowerCase().replace(/\s+/g, '');
+          if (processedTitles.has(titleKey)) {
+            console.log(`🚫 Skipping duplicate title: "${event.title}"`);
+            return false;
+          }
+          processedTitles.add(titleKey);
+          return true;
+        });
+        
+        events.push(...uniqueEvents);
       }
     }
 
-    // Look for cross-sentence patterns
-    const crossSentenceEvents = this.extractCrossSentenceEvents(sentences, subject);
-    events.push(...crossSentenceEvents);
-
-    // Process subject line separately if it looks like an event
-    if (subject && this.containsEventKeywords(subject)) {
-      const subjectEvents = this.extractFromSentence(subject, subject, processedText);
-      events.push(...subjectEvents);
-    }
-
+    // Enhanced deduplication and ranking
     const finalEvents = this.deduplicateAndRank(events);
-    console.log(`✅ Basic extraction complete: ${finalEvents.length} events found`);
+    
+    console.log(`✅ Enhanced basic extraction complete: ${finalEvents.length} unique events found`);
+    
+    // Log final events for debugging
+    finalEvents.forEach((event, index) => {
+      console.log(`📅 Event ${index + 1}: "${event.title}" on ${event.date} ${event.time ? 'at ' + event.time : ''}`);
+    });
     
     return finalEvents;
+  }
+
+  /**
+   * Check if this is an assignment/deadline email
+   */
+  isAssignmentEmail(text, subject) {
+    const assignmentIndicators = [
+      'assignment', 'lab', 'homework', 'project', 'quiz', 'exam',
+      'due', 'deadline', 'submission', 'submit'
+    ];
+    
+    const combinedText = (text + ' ' + subject).toLowerCase();
+    
+    const hasAssignmentKeyword = assignmentIndicators.some(keyword => 
+      combinedText.includes(keyword)
+    );
+    
+    const hasCourseCode = /\b[A-Z]{2,4}\d{3}\b/.test(text + ' ' + subject);
+    
+    return hasAssignmentKeyword && hasCourseCode;
+  }
+
+  /**
+   * Extract assignment event from entire email text
+   */
+  extractAssignmentEvent(text, subject) {
+    console.log('📚 Extracting assignment event from full text');
+    
+    // Extract title with priority on subject line
+    let title = 'Assignment';
+    
+    // Priority 1: Extract from subject
+    if (subject) {
+      const subjectMatch = subject.match(/([A-Z]{2,4}\d{3})\s+([^:,]+)/i);
+      if (subjectMatch) {
+        title = `${subjectMatch[1]} ${subjectMatch[2].trim()}`;
+      } else {
+        // Clean subject
+        title = subject
+          .replace(/^(re:|fwd:|fee?ls\s+)?due\s+on\s+.*?:\s*/i, '')
+          .replace(/,.*$/, '')
+          .trim();
+      }
+    }
+    
+    // Priority 2: Extract from text if subject didn't work
+    if (title === 'Assignment' || title.length < 5) {
+      const textMatch = text.match(/assignment\s+([A-Z]{2,4}\d{3})\s+([^.,\n]+)/i) ||
+                       text.match(/([A-Z]{2,4}\d{3})\s+(lab\s+\d+[^.,\n]*)/i);
+      if (textMatch) {
+        title = `${textMatch[1]} ${textMatch[2].trim()}`;
+      }
+    }
+    
+    // Extract due date and time from ENTIRE text
+    const dates = this.extractDates(text);
+    const times = this.extractTimes(text); // This will now prioritize "Due:" times
+    
+    console.log('📚 Assignment extraction results:', {
+      title,
+      dates,
+      times
+    });
+    
+    if (dates.length > 0) {
+      return {
+        id: this.generateId(),
+        title: this.cleanTitle(title),
+        date: dates[0], // Use first date found
+        time: times.length > 0 ? times[0] : null, // Use first (priority) time
+        location: null,
+        description: text.substring(0, 200).trim(),
+        type: 'academic',
+        eventCategory: 'deadline',
+        confidence: 0.9, // High confidence for assignments
+        source: 'basic_extractor',
+        extractedAt: new Date().toISOString(),
+        icon: '📚'
+      };
+    }
+    
+    return null;
   }
 
   /**
@@ -268,40 +385,81 @@ class BasicEventExtractor {
   }
 
   /**
-   * Extract events from a single sentence
+   * Extract events from a single sentence - ENHANCED
    */
   extractFromSentence(sentence, subject, fullText) {
     const events = [];
+    console.log(`🔬 Deep extracting from: "${sentence}"`);
     
     // Extract components
     const eventType = this.detectEventType(sentence);
     const dates = this.extractDates(sentence);
     const times = this.extractTimes(sentence);
     const locations = this.extractLocations(sentence);
-    const title = this.extractTitle(sentence, subject, eventType);
-
-    // Create events for each date found
-    dates.forEach(date => {
+    
+    console.log('Extracted components:', { 
+      eventType: eventType?.name, 
+      dates, 
+      times, 
+      locations 
+    });
+    
+    // For assignments/deadlines, we typically want only one event per assignment
+    if (eventType && eventType.name === 'deadline' && dates.length > 0) {
+      const title = this.extractTitle(sentence, subject, eventType);
+      
+      // Create single event for deadline
       const event = {
         id: this.generateId(),
         title: title,
-        date: date,
+        date: dates[0], // Use first (most confident) date
         time: times.length > 0 ? times[0] : null,
         location: locations.length > 0 ? locations[0] : null,
         description: sentence.trim(),
-        type: eventType?.type || 'general',
-        eventCategory: eventType?.name || 'general',
-        confidence: this.calculateConfidence(eventType, date, times, locations, sentence),
+        type: eventType.type,
+        eventCategory: eventType.name,
+        confidence: this.calculateConfidence(eventType, dates[0], times, locations, sentence),
         source: 'basic_extractor',
         extractedAt: new Date().toISOString(),
-        icon: eventType?.icon || '📅'
+        icon: eventType.icon
       };
-
+      
+      console.log('✅ Created deadline event:', event);
       events.push(event);
-    });
-
+      
+    } else if (dates.length > 0) {
+      // For regular events, create events for each date found
+      // But limit to avoid too many duplicates
+      const maxEvents = eventType?.name === 'deadline' ? 1 : Math.min(dates.length, 2);
+      
+      for (let i = 0; i < maxEvents; i++) {
+        const date = dates[i];
+        const title = this.extractTitle(sentence, subject, eventType);
+        
+        const event = {
+          id: this.generateId(),
+          title: title,
+          date: date,
+          time: times.length > 0 ? times[0] : null,
+          location: locations.length > 0 ? locations[0] : null,
+          description: sentence.trim(),
+          type: eventType?.type || 'general',
+          eventCategory: eventType?.name || 'general',
+          confidence: this.calculateConfidence(eventType, date, times, locations, sentence),
+          source: 'basic_extractor',
+          extractedAt: new Date().toISOString(),
+          icon: eventType?.icon || '📅'
+        };
+        
+        console.log(`✅ Created event ${i + 1}:`, event);
+        events.push(event);
+      }
+    }
+    
     // If no dates found but has strong event indicators, create a TBD event
-    if (dates.length === 0 && eventType && this.hasStrongEventIndicators(sentence)) {
+    else if (eventType && this.hasStrongEventIndicators(sentence)) {
+      const title = this.extractTitle(sentence, subject, eventType);
+      
       const event = {
         id: this.generateId(),
         title: title,
@@ -317,10 +475,11 @@ class BasicEventExtractor {
         icon: eventType.icon,
         flags: ['date_tbd']
       };
-
+      
+      console.log('✅ Created TBD event:', event);
       events.push(event);
     }
-
+    
     return events;
   }
 

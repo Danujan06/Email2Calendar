@@ -21,6 +21,7 @@ class PopupController {
     this.handleScanEmail = this.handleScanEmail.bind(this);
     this.handleAddEvent = this.handleAddEvent.bind(this);
     this.handleDeleteEvent = this.handleDeleteEvent.bind(this);
+    // Removed handleEditEvent binding since edit functionality is not needed
   }
 
   /**
@@ -101,7 +102,7 @@ class PopupController {
       ]);
       
       this.currentSettings = {
-        extractorType: settings.extractorType || 'basic', // Use basic as default for debugging
+        extractorType: settings.extractorType || 'enhanced', // Use basic as default for debugging
         autoAddEvents: settings.autoAddEvents === true,
         autoDetection: settings.autoDetection !== false,
         confidenceThreshold: settings.confidenceThreshold || 0.5, // Lower threshold for debugging

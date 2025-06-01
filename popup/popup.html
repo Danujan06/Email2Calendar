@@ -28,18 +28,25 @@
       </div>
 
       <div class="actions-section">
-        <button id="scanCurrentEmail" class="action-btn primary">
-          <span class="btn-icon">📧</span>
-          <span class="btn-label">Scan Current Email</span>
-        </button>
-        <button id="toggleAutoDetection" class="action-btn">
-          <span class="btn-icon">🔄</span>
-          <span class="btn-text">Auto-Detection</span>
-        </button>
-        <button id="openSettings" class="action-btn">
-          <span class="btn-icon">⚙️</span>
-          <span class="btn-text">Settings</span>
-        </button>
+        <!-- Primary action in its own row -->
+        <div class="action-row">
+          <button id="scanCurrentEmail" class="action-btn primary">
+            <span class="btn-icon">📧</span>
+            <span class="btn-label">Scan Current Email</span>
+          </button>
+        </div>
+        
+        <!-- Secondary actions in one row -->
+        <div class="action-row">
+          <button id="toggleAutoDetection" class="action-btn">
+            <span class="btn-icon">🔄</span>
+            <span class="btn-text">Auto-Detection</span>
+          </button>
+          <button id="openSettings" class="action-btn">
+            <span class="btn-icon">⚙️</span>
+            <span class="btn-text">Settings</span>
+          </button>
+        </div>
       </div>
 
       <div class="recent-events">

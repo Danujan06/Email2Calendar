@@ -1,5 +1,5 @@
 // ============================================================================
-// UI MANAGER MODULE - popup/modules/ui-manager.js
+// UI MANAGER MODULE - popup/modules/ui-manager.js (COMPLETE FIXED VERSION)
 // ============================================================================
 
 /**
@@ -212,9 +212,9 @@ class UIManager {
   }
 
   /**
-   * Display events with interactive controls
+   * Display events with interactive controls - COMPACT VERSION
    */
-  displayEvents(events, onAddEvent, onDeleteEvent, onEditEvent = null) {
+  displayEvents(events, onAddEvent, onDeleteEvent) {
     if (!this.elements.recentEventsList) return;
 
     if (events.length === 0) {
@@ -233,48 +233,32 @@ class UIManager {
     ).join('');
 
     // Bind event listeners
-    this.bindEventListeners(events, onAddEvent, onDeleteEvent, onEditEvent);
+    this.bindEventListeners(events, onAddEvent, onDeleteEvent);
   }
 
   /**
-   * Create HTML for individual event
+   * Create HTML for individual event - COMPACT VERSION
    */
   createEventHTML(event) {
     const statusClass = event.status || 'detected';
-    const statusIcon = this.getStatusIcon(statusClass);
-    const confidencePercentage = Math.round((event.confidence || 0) * 100);
     
     return `
       <div class="event-item ${statusClass}" data-event-id="${event.id}">
         <div class="event-content">
           <div class="event-header">
-            <div class="event-title" title="${event.title}">${event.title}</div>
+            <div class="event-title">${this.truncateText(event.title, 40)}</div>
             <div class="event-type-badge ${event.type || 'general'}">${event.type || 'general'}</div>
           </div>
           
-          <div class="event-details">
-            <div class="event-datetime">
-              <span class="datetime-icon">🗓️</span>
-              ${this.formatDateTime(event.date, event.time)}
-            </div>
-            
-            ${event.location ? `
-              <div class="event-location">
-                <span class="location-icon">📍</span>
-                ${event.location}
-              </div>
-            ` : ''}
-            
-            <div class="event-confidence">
-              <span class="confidence-icon">🎯</span>
-              ${confidencePercentage}% confidence
-              ${this.getConfidenceBar(confidencePercentage)}
-            </div>
+          <div class="event-datetime">
+            <span class="datetime-icon">🗓️</span>
+            ${this.formatDateTime(event.date, event.time)}
           </div>
-
-          ${event.description ? `
-            <div class="event-description" title="${event.description}">
-              ${this.truncateText(event.description, 100)}
+          
+          ${event.location ? `
+            <div class="event-location">
+              <span class="location-icon">📍</span>
+              ${this.truncateText(event.location, 30)}
             </div>
           ` : ''}
         </div>
@@ -282,17 +266,12 @@ class UIManager {
         <div class="event-actions">
           ${this.createEventActionButtons(event)}
         </div>
-        
-        <div class="event-status-badge ${statusClass}">
-          <span class="status-icon">${statusIcon}</span>
-          <span class="status-text">${this.formatStatusText(statusClass)}</span>
-        </div>
       </div>
     `;
   }
 
   /**
-   * Create action buttons based on event status
+   * Create action buttons based on event status - COMPACT VERSION
    */
   createEventActionButtons(event) {
     const buttons = [];
@@ -307,15 +286,7 @@ class UIManager {
       `);
     }
 
-    // Edit button (always available)
-    buttons.push(`
-      <button class="event-btn edit-event-btn" data-event-id="${event.id}" title="Edit Event">
-        <span class="btn-icon">✏️</span>
-        <span class="btn-text">Edit</span>
-      </button>
-    `);
-
-    // Delete button (always available)
+    // Delete button
     buttons.push(`
       <button class="event-btn delete-event-btn" data-event-id="${event.id}" title="Delete Event">
         <span class="btn-icon">🗑️</span>
@@ -327,9 +298,9 @@ class UIManager {
   }
 
   /**
-   * Bind event listeners to action buttons
+   * Bind event listeners to action buttons - SIMPLIFIED
    */
-  bindEventListeners(events, onAddEvent, onDeleteEvent, onEditEvent) {
+  bindEventListeners(events, onAddEvent, onDeleteEvent) {
     // Add event listeners
     this.elements.recentEventsList.querySelectorAll('.add-event-btn').forEach(button => {
       button.addEventListener('click', async (e) => {
@@ -356,21 +327,6 @@ class UIManager {
         }
       });
     });
-
-    // Edit event listeners (if callback provided)
-    if (onEditEvent) {
-      this.elements.recentEventsList.querySelectorAll('.edit-event-btn').forEach(button => {
-        button.addEventListener('click', async (e) => {
-          e.preventDefault();
-          const eventId = e.currentTarget.dataset.eventId;
-          const event = events.find(e => e.id == eventId);
-          
-          if (event) {
-            await onEditEvent(event);
-          }
-        });
-      });
-    }
   }
 
   /**
@@ -404,16 +360,6 @@ class UIManager {
       if (eventElement) {
         eventElement.classList.remove('detected');
         eventElement.classList.add('added');
-        
-        // Update status badge
-        const statusBadge = eventElement.querySelector('.event-status-badge');
-        if (statusBadge) {
-          statusBadge.innerHTML = `
-            <span class="status-icon">✅</span>
-            <span class="status-text">Added</span>
-          `;
-          statusBadge.className = 'event-status-badge added';
-        }
       }
 
     } catch (error) {
@@ -515,105 +461,6 @@ class UIManager {
   }
 
   /**
-   * Show event edit dialog
-   */
-  showEventEditDialog(event) {
-    return new Promise((resolve) => {
-      const dialog = document.createElement('div');
-      dialog.className = 'event-edit-dialog-overlay';
-      dialog.innerHTML = `
-        <div class="event-edit-dialog">
-          <div class="dialog-header">
-            <h3>Edit Event</h3>
-            <button class="dialog-close">×</button>
-          </div>
-          <div class="dialog-body">
-            <form id="eventEditForm">
-              <div class="form-group">
-                <label for="eventTitle">Title:</label>
-                <input type="text" id="eventTitle" name="title" value="${event.title || ''}" required>
-              </div>
-              
-              <div class="form-row">
-                <div class="form-group">
-                  <label for="eventDate">Date:</label>
-                  <input type="date" id="eventDate" name="date" value="${event.date || ''}" required>
-                </div>
-                
-                <div class="form-group">
-                  <label for="eventTime">Time:</label>
-                  <input type="time" id="eventTime" name="time" value="${event.time || ''}">
-                </div>
-              </div>
-              
-              <div class="form-group">
-                <label for="eventLocation">Location:</label>
-                <input type="text" id="eventLocation" name="location" value="${event.location || ''}" placeholder="Optional">
-              </div>
-              
-              <div class="form-group">
-                <label for="eventDescription">Description:</label>
-                <textarea id="eventDescription" name="description" rows="3" placeholder="Optional">${event.description || ''}</textarea>
-              </div>
-              
-              <div class="form-group">
-                <label for="eventType">Type:</label>
-                <select id="eventType" name="type">
-                  <option value="general" ${event.type === 'general' ? 'selected' : ''}>General</option>
-                  <option value="social" ${event.type === 'social' ? 'selected' : ''}>Social</option>
-                  <option value="professional" ${event.type === 'professional' ? 'selected' : ''}>Professional</option>
-                  <option value="personal" ${event.type === 'personal' ? 'selected' : ''}>Personal</option>
-                </select>
-              </div>
-            </form>
-          </div>
-          <div class="dialog-footer">
-            <button type="button" class="dialog-btn cancel-btn">Cancel</button>
-            <button type="submit" form="eventEditForm" class="dialog-btn save-btn">Save Changes</button>
-          </div>
-        </div>
-      `;
-
-      document.body.appendChild(dialog);
-
-      // Handle form submission
-      dialog.querySelector('#eventEditForm').addEventListener('submit', (e) => {
-        e.preventDefault();
-        
-        const formData = new FormData(e.target);
-        const updatedEvent = {
-          ...event,
-          title: formData.get('title'),
-          date: formData.get('date'),
-          time: formData.get('time'),
-          location: formData.get('location'),
-          description: formData.get('description'),
-          type: formData.get('type')
-        };
-        
-        dialog.remove();
-        resolve(updatedEvent);
-      });
-
-      // Handle cancel
-      const cancelHandler = () => {
-        dialog.remove();
-        resolve(null);
-      };
-
-      dialog.querySelector('.cancel-btn').onclick = cancelHandler;
-      dialog.querySelector('.dialog-close').onclick = cancelHandler;
-
-      // Handle backdrop click
-      dialog.onclick = (e) => {
-        if (e.target === dialog) {
-          cancelHandler();
-        }
-      };
-    });
-  }
-
-  /**
    * Utility methods for formatting and display
    */
   formatDateTime(date, time) {
@@ -637,6 +484,9 @@ class UIManager {
     }
   }
 
+  /**
+   * Format time for display (12-hour format)
+   */
   formatTimeDisplay(time) {
     if (!time || time === 'Time TBD') return '';
     
@@ -650,6 +500,9 @@ class UIManager {
     }
   }
 
+  /**
+   * Get status icon for event status
+   */
   getStatusIcon(status) {
     const icons = {
       'detected': '🔍',
@@ -661,6 +514,9 @@ class UIManager {
     return icons[status] || '❓';
   }
 
+  /**
+   * Format status text for display
+   */
   formatStatusText(status) {
     const texts = {
       'detected': 'Detected',
@@ -672,15 +528,9 @@ class UIManager {
     return texts[status] || 'Unknown';
   }
 
-  getConfidenceBar(percentage) {
-    const color = percentage >= 80 ? '#4caf50' : percentage >= 60 ? '#ff9800' : '#f44336';
-    return `
-      <div class="confidence-bar">
-        <div class="confidence-fill" style="width: ${percentage}%; background-color: ${color};"></div>
-      </div>
-    `;
-  }
-
+  /**
+   * Truncate text to specified length
+   */
   truncateText(text, maxLength) {
     if (!text || text.length <= maxLength) return text;
     return text.substring(0, maxLength).trim() + '...';
@@ -718,7 +568,7 @@ class UIManager {
     if (this.elements.toggleAutoDetection) {
       this.elements.toggleAutoDetection.innerHTML = `
         <span class="btn-icon">${enabled ? '🔄' : '⏸️'}</span>
-        <span class="btn-text">${enabled ? 'Auto-Detection ON' : 'Auto-Detection OFF'}</span>
+        <span class="btn-text">${enabled ? 'Auto-On' : 'Auto-Off'}</span>
       `;
       this.elements.toggleAutoDetection.classList.toggle('active', enabled);
     }
@@ -743,6 +593,133 @@ class UIManager {
     chrome.storage.sync.set({ theme: newTheme });
     
     return newTheme;
+  }
+
+  /**
+   * Clear all notifications
+   */
+  clearAllNotifications() {
+    this.notificationQueue = [];
+    const existing = document.querySelector('.popup-notification');
+    if (existing) existing.remove();
+  }
+
+  /**
+   * Get UI statistics for debugging
+   */
+  getUIStats() {
+    return {
+      elementsFound: Object.keys(this.elements).length,
+      elementsAvailable: Object.values(this.elements).filter(el => el).length,
+      notificationQueueLength: this.notificationQueue.length,
+      isShowingNotification: this.isShowingNotification,
+      currentTheme: this.getCurrentTheme()
+    };
+  }
+
+  /**
+   * Validate UI elements
+   */
+  validateElements() {
+    const validation = {};
+    Object.entries(this.elements).forEach(([key, element]) => {
+      validation[key] = {
+        exists: !!element,
+        inDOM: element ? document.contains(element) : false
+      };
+    });
+    return validation;
+  }
+
+  /**
+   * Refresh UI elements (re-initialize if needed)
+   */
+  refreshElements() {
+    this.elements = this.initializeElements();
+    console.log('🔄 UI elements refreshed');
+  }
+
+  /**
+   * Set button loading state
+   */
+  setButtonLoading(buttonElement, loading = true) {
+    if (!buttonElement) return;
+    
+    if (loading) {
+      buttonElement.disabled = true;
+      buttonElement.classList.add('loading');
+    } else {
+      buttonElement.disabled = false;
+      buttonElement.classList.remove('loading');
+    }
+  }
+
+  /**
+   * Reset all button states
+   */
+  resetAllButtons() {
+    const buttons = document.querySelectorAll('.action-btn, .event-btn');
+    buttons.forEach(button => {
+      button.disabled = false;
+      button.classList.remove('loading', 'success', 'error');
+    });
+  }
+
+  /**
+   * Update event count in UI
+   */
+  updateEventCount(count) {
+    const eventsList = this.elements.recentEventsList;
+    if (eventsList) {
+      const eventsCount = eventsList.querySelectorAll('.event-item').length;
+      console.log(`📊 UI showing ${eventsCount} events (expected: ${count})`);
+    }
+  }
+
+  /**
+   * Flash element for attention
+   */
+  flashElement(element, duration = 1000) {
+    if (!element) return;
+    
+    element.style.transition = 'background-color 0.3s ease';
+    const originalBackground = element.style.backgroundColor;
+    
+    element.style.backgroundColor = '#fff3cd';
+    
+    setTimeout(() => {
+      element.style.backgroundColor = originalBackground;
+      setTimeout(() => {
+        element.style.transition = '';
+      }, 300);
+    }, duration);
+  }
+
+  /**
+   * Scroll to element
+   */
+  scrollToElement(element) {
+    if (element && element.scrollIntoView) {
+      element.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'nearest' 
+      });
+    }
+  }
+
+  /**
+   * Get element visibility
+   */
+  isElementVisible(element) {
+    if (!element) return false;
+    
+    const rect = element.getBoundingClientRect();
+    return (
+      rect.top >= 0 &&
+      rect.left >= 0 &&
+      rect.bottom <= (window.innerHeight || document.documentElement.clientHeight) &&
+      rect.right <= (window.innerWidth || document.documentElement.clientWidth)
+    );
   }
 }
 
