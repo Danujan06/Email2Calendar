@@ -34,36 +34,36 @@ class BasicEventExtractor {
       'zoom', 'teams', 'meet', 'skype', 'online', 'virtual'
     ];
 
-    // Enhanced date patterns
+    // Enhanced date patterns with proper priority
     this.datePatterns = [
-      // Relative dates
+      // PRIORITY 1: Explicit dates with day names (for assignments)
+      /(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})/gi,
+      
+      // PRIORITY 2: Explicit dates without day names  
+      /\b(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})/gi,
+      
+      // PRIORITY 3: Abbreviated month names
+      /\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.?\s+(\d{4})/gi,
+      
+      // PRIORITY 4: Relative dates
       /\b(today|tonight|this evening)\b/gi,
       /\b(tomorrow|tmrw|next day)\b/gi,
       /\b(yesterday)\b/gi,
       
-      // Day names with optional modifiers
+      // PRIORITY 5: Day names with optional modifiers (only if no explicit date)
       /\b(next|this|coming|last)?\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/gi,
       /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*(next|this|coming)?\b/gi,
       
-      // Month/day patterns
-      /\b(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/gi,
-      /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?\b/gi,
-      
-      // Numeric date patterns
+      // PRIORITY 6: Numeric date patterns
       /\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})\b/g,
       /\b(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})\b/g,
       
-      // Day month patterns
-      /\b(\d{1,2})(?:st|nd|rd|th)\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s*(\d{4})?\b/gi,
-      /\b(\d{1,2})(?:st|nd|rd|th)\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.?\s*(\d{4})?\b/gi,
-      
-      // Due date patterns
+      // PRIORITY 7: Due date specific patterns
       /\bdue:?\s*(.+?)(?:\.|,|$)/gi,
       /\bdeadline:?\s*(.+?)(?:\.|,|$)/gi,
       /\bon\s+(.+?)(?:\.|,|at|$)/gi
     ];
 
-    // Enhanced time patterns
     // Enhanced time patterns with specific due date patterns
     this.timePatterns = [
       // Due/deadline specific patterns - HIGHEST PRIORITY
@@ -324,6 +324,181 @@ class BasicEventExtractor {
   }
 
   /**
+   * FIXED: Normalize date string to ISO format with proper priority
+   */
+  normalizeDate(dateStr) {
+    const today = new Date();
+    const lowerDate = dateStr.toLowerCase();
+    
+    console.log(`🔍 Parsing date: "${dateStr}"`);
+    
+    // Handle relative dates first
+    if (lowerDate.includes('today') || lowerDate.includes('tonight')) {
+      const result = today.toISOString().split('T')[0];
+      console.log(`✅ Parsed as today: ${result}`);
+      return result;
+    }
+    
+    if (lowerDate.includes('tomorrow') || lowerDate.includes('tmrw')) {
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      const result = tomorrow.toISOString().split('T')[0];
+      console.log(`✅ Parsed as tomorrow: ${result}`);
+      return result;
+    }
+
+    if (lowerDate.includes('yesterday')) {
+      const yesterday = new Date(today);
+      yesterday.setDate(today.getDate() - 1);
+      const result = yesterday.toISOString().split('T')[0];
+      console.log(`✅ Parsed as yesterday: ${result}`);
+      return result;
+    }
+    
+    // ENHANCED: Handle explicit dates with day names - PRIORITY 1
+    // Pattern: "Sunday, 1 June 2025" or "Monday, 15 December 2024"
+    const explicitDateWithDayMatch = dateStr.match(
+      /(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday),?\s+(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})/i
+    );
+    
+    if (explicitDateWithDayMatch) {
+      const day = parseInt(explicitDateWithDayMatch[1]);
+      const monthName = explicitDateWithDayMatch[2];
+      const year = parseInt(explicitDateWithDayMatch[3]);
+      
+      console.log(`🎯 Found explicit date with day: day=${day}, month=${monthName}, year=${year}`);
+      
+      const monthIndex = this.getMonthIndex(monthName);
+      if (monthIndex !== -1) {
+        const date = new Date(year, monthIndex, day);
+        const result = date.toISOString().split('T')[0];
+        console.log(`✅ Parsed explicit date: ${result}`);
+        return result;
+      }
+    }
+    
+    // ENHANCED: Handle dates without day names - PRIORITY 2
+    // Pattern: "1 June 2025" or "15 December 2024"
+    const explicitDateMatch = dateStr.match(
+      /\b(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s+(\d{4})/i
+    );
+    
+    if (explicitDateMatch) {
+      const day = parseInt(explicitDateMatch[1]);
+      const monthName = explicitDateMatch[2];
+      const year = parseInt(explicitDateMatch[3]);
+      
+      console.log(`🎯 Found explicit date: day=${day}, month=${monthName}, year=${year}`);
+      
+      const monthIndex = this.getMonthIndex(monthName);
+      if (monthIndex !== -1) {
+        const date = new Date(year, monthIndex, day);
+        const result = date.toISOString().split('T')[0];
+        console.log(`✅ Parsed explicit date: ${result}`);
+        return result;
+      }
+    }
+    
+    // Handle month/day patterns with abbreviated months - PRIORITY 3
+    const monthAbbrMatch = dateStr.match(
+      /\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.?\s+(\d{4})/i
+    );
+    
+    if (monthAbbrMatch) {
+      const day = parseInt(monthAbbrMatch[1]);
+      const monthName = monthAbbrMatch[2];
+      const year = parseInt(monthAbbrMatch[3]);
+      
+      console.log(`🎯 Found abbreviated date: day=${day}, month=${monthName}, year=${year}`);
+      
+      const monthIndex = this.getMonthIndex(monthName);
+      if (monthIndex !== -1) {
+        const date = new Date(year, monthIndex, day);
+        const result = date.toISOString().split('T')[0];
+        console.log(`✅ Parsed abbreviated date: ${result}`);
+        return result;
+      }
+    }
+    
+    // Handle day names ONLY if no explicit date was found - PRIORITY 4
+    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const dayMatch = lowerDate.match(/(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/);
+    
+    if (dayMatch) {
+      // Only use this if we didn't find an explicit date above
+      console.log(`🎯 Found day name only: ${dayMatch[1]}`);
+      
+      const targetDay = days.indexOf(dayMatch[1]);
+      const currentDay = today.getDay();
+      
+      // Determine if it's next week or this week
+      let daysUntil = (targetDay - currentDay + 7) % 7;
+      if (daysUntil === 0) daysUntil = 7; // Next week if it's the same day
+      
+      // Check for "next" modifier
+      if (lowerDate.includes('next')) {
+        daysUntil += 7;
+      }
+      
+      const targetDate = new Date(today);
+      targetDate.setDate(today.getDate() + daysUntil);
+      const result = targetDate.toISOString().split('T')[0];
+      console.log(`✅ Parsed day name to: ${result}`);
+      return result;
+    }
+    
+    // Handle numeric dates - PRIORITY 5
+    const numericMatch = dateStr.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
+    if (numericMatch) {
+      let month = parseInt(numericMatch[1]);
+      let day = parseInt(numericMatch[2]);
+      let year = parseInt(numericMatch[3]);
+      
+      // Handle 2-digit years
+      if (year < 50) {
+        year += 2000;
+      } else if (year < 100) {
+        year += 1900;
+      }
+      
+      // Assume MM/DD/YYYY format for US dates
+      if (month <= 12 && day <= 31) {
+        const date = new Date(year, month - 1, day);
+        const result = date.toISOString().split('T')[0];
+        console.log(`✅ Parsed numeric date: ${result}`);
+        return result;
+      }
+    }
+    
+    console.log(`❌ Could not parse date: "${dateStr}"`);
+    return null;
+  }
+
+  /**
+   * Enhanced month index lookup with better logging
+   */
+  getMonthIndex(monthName) {
+    const months = {
+      january: 0, jan: 0, 
+      february: 1, feb: 1, 
+      march: 2, mar: 2,
+      april: 3, apr: 3, 
+      may: 4, 
+      june: 5, jun: 5, 
+      july: 6, jul: 6,
+      august: 7, aug: 7, 
+      september: 8, sep: 8, 
+      october: 9, oct: 9,
+      november: 10, nov: 10, 
+      december: 11, dec: 11
+    };
+    
+    const index = months[monthName.toLowerCase()];
+    console.log(`🗓️ Month "${monthName}" -> index ${index}`);
+    return index !== undefined ? index : -1;
+  }
+
+  /**
    * Preprocess text for better extraction
    */
   preprocessText(text) {
@@ -484,53 +659,6 @@ class BasicEventExtractor {
   }
 
   /**
-   * Extract events that span multiple sentences
-   */
-  extractCrossSentenceEvents(sentences, subject) {
-    const events = [];
-    
-    // Look for patterns like:
-    // "Let's have dinner" (sentence 1)
-    // "How about tomorrow at 7pm?" (sentence 2)
-    
-    for (let i = 0; i < sentences.length - 1; i++) {
-      const currentSentence = sentences[i];
-      const nextSentence = sentences[i + 1];
-      
-      // Check if current sentence has event but no time/date
-      if (this.hasEventKeywordOnly(currentSentence) && this.hasTimeOrDate(nextSentence)) {
-        const eventType = this.detectEventType(currentSentence);
-        const dates = this.extractDates(nextSentence);
-        const times = this.extractTimes(nextSentence);
-        const locations = this.extractLocations(currentSentence + ' ' + nextSentence);
-        const title = this.extractTitle(currentSentence, subject, eventType);
-
-        if (dates.length > 0) {
-          const event = {
-            id: this.generateId(),
-            title: title,
-            date: dates[0],
-            time: times.length > 0 ? times[0] : null,
-            location: locations.length > 0 ? locations[0] : null,
-            description: `${currentSentence.trim()} ${nextSentence.trim()}`,
-            type: eventType?.type || 'general',
-            eventCategory: eventType?.name || 'general',
-            confidence: this.calculateConfidence(eventType, dates[0], times, locations, currentSentence),
-            source: 'basic_extractor',
-            extractedAt: new Date().toISOString(),
-            icon: eventType?.icon || '📅',
-            flags: ['cross_sentence']
-          };
-
-          events.push(event);
-        }
-      }
-    }
-
-    return events;
-  }
-
-  /**
    * Detect event type from sentence
    */
   detectEventType(sentence) {
@@ -651,91 +779,6 @@ class BasicEventExtractor {
     }
 
     return 'Event';
-  }
-
-  /**
-   * Normalize date string to ISO format
-   */
-  normalizeDate(dateStr) {
-    const today = new Date();
-    const lowerDate = dateStr.toLowerCase();
-    
-    // Handle relative dates
-    if (lowerDate.includes('today') || lowerDate.includes('tonight')) {
-      return today.toISOString().split('T')[0];
-    }
-    
-    if (lowerDate.includes('tomorrow') || lowerDate.includes('tmrw')) {
-      const tomorrow = new Date(today);
-      tomorrow.setDate(today.getDate() + 1);
-      return tomorrow.toISOString().split('T')[0];
-    }
-
-    if (lowerDate.includes('yesterday')) {
-      const yesterday = new Date(today);
-      yesterday.setDate(today.getDate() - 1);
-      return yesterday.toISOString().split('T')[0];
-    }
-    
-    // Handle day names
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const dayMatch = lowerDate.match(/(monday|tuesday|wednesday|thursday|friday|saturday|sunday)/);
-    
-    if (dayMatch) {
-      const targetDay = days.indexOf(dayMatch[1]);
-      const currentDay = today.getDay();
-      
-      // Determine if it's next week or this week
-      let daysUntil = (targetDay - currentDay + 7) % 7;
-      if (daysUntil === 0) daysUntil = 7; // Next week if it's the same day
-      
-      // Check for "next" modifier
-      if (lowerDate.includes('next')) {
-        daysUntil += 7;
-      }
-      
-      const targetDate = new Date(today);
-      targetDate.setDate(today.getDate() + daysUntil);
-      return targetDate.toISOString().split('T')[0];
-    }
-    
-    // Handle month/day patterns
-    const monthMatch = lowerDate.match(/(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\.?\s+(\d{1,2})(?:st|nd|rd|th)?,?\s*(\d{4})?/);
-    
-    if (monthMatch) {
-      const monthName = monthMatch[1];
-      const day = parseInt(monthMatch[2]);
-      const year = monthMatch[3] ? parseInt(monthMatch[3]) : today.getFullYear();
-      
-      const monthIndex = this.getMonthIndex(monthName);
-      if (monthIndex !== -1) {
-        const date = new Date(year, monthIndex, day);
-        return date.toISOString().split('T')[0];
-      }
-    }
-    
-    // Handle numeric dates
-    const numericMatch = dateStr.match(/(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})/);
-    if (numericMatch) {
-      let month = parseInt(numericMatch[1]);
-      let day = parseInt(numericMatch[2]);
-      let year = parseInt(numericMatch[3]);
-      
-      // Handle 2-digit years
-      if (year < 50) {
-        year += 2000;
-      } else if (year < 100) {
-        year += 1900;
-      }
-      
-      // Assume MM/DD/YYYY format for US dates
-      if (month <= 12 && day <= 31) {
-        const date = new Date(year, month - 1, day);
-        return date.toISOString().split('T')[0];
-      }
-    }
-    
-    return null;
   }
 
   /**
@@ -903,17 +946,6 @@ class BasicEventExtractor {
     return strongIndicators.some(indicator => 
       lowerSentence.includes(indicator)
     );
-  }
-
-  getMonthIndex(monthName) {
-    const months = {
-      january: 0, jan: 0, february: 1, feb: 1, march: 2, mar: 2,
-      april: 3, apr: 3, may: 4, june: 5, jun: 5, july: 6, jul: 6,
-      august: 7, aug: 7, september: 8, sep: 8, october: 9, oct: 9,
-      november: 10, nov: 10, december: 11, dec: 11
-    };
-    
-    return months[monthName.toLowerCase()] ?? -1;
   }
 
   getDefaultDate() {
