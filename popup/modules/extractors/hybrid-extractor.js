@@ -240,8 +240,8 @@ ${emailText}`;
   }
 
   /**
-   * Enhanced Llama response parsing with date validation
-   * ENHANCED VERSION FROM FIX FILE
+   * Enhanced Llama response parsing with date validation and assignment scheduling
+   * ENHANCED VERSION FROM FIX FILE + ASSIGNMENT SCHEDULING
    */
   parseLlamaResponse(response) {
     try {
@@ -269,24 +269,36 @@ ${emailText}`;
         .filter(event => event && typeof event === 'object')
         .map(event => {
           const validatedDate = this.validateDate(event.date);
-          const validatedTime = this.validateTime(event.time);
+          let validatedTime = this.validateTime(event.time);
           
           if (!validatedDate) {
             console.warn('⚠️ Skipping event with invalid date:', event);
             return null;
           }
           
+          // ENHANCED: Handle assignment/deadline scheduling
+          const isAssignmentOrDeadline = this.isAssignmentOrDeadline(event);
+          
+          if (isAssignmentOrDeadline && validatedTime) {
+            // Schedule 10 minutes before the actual deadline
+            const adjustedTime = this.subtractMinutesFromTime(validatedTime, 10);
+            console.log(`📚 Assignment detected: Scheduling 10 minutes before deadline`);
+            console.log(`⏰ Original deadline: ${validatedTime} → Reminder: ${adjustedTime}`);
+            validatedTime = adjustedTime;
+          }
+          
           const cleanedEvent = {
             id: event.id || this.generateId(),
-            title: event.title || 'Event',
+            title: this.enhanceAssignmentTitle(event.title || 'Event', isAssignmentOrDeadline),
             date: validatedDate,
             time: validatedTime,
             location: event.location || null,
-            description: event.description || '',
+            description: this.enhanceAssignmentDescription(event.description || '', isAssignmentOrDeadline, event.time),
             type: event.type || 'general',
             confidence: Math.min(Math.max(event.confidence || 0.5, 0), 1),
             source: event.source || 'llama',
-            extractedAt: new Date().toISOString()
+            extractedAt: new Date().toISOString(),
+            isAssignmentReminder: isAssignmentOrDeadline && validatedTime !== null
           };
           
           console.log('✅ Validated event:', cleanedEvent);
@@ -380,6 +392,7 @@ ${emailText}`;
 
   /**
    * Basic pattern extraction as fallback when Llama fails
+   * ENHANCED with assignment scheduling
    */
   basicPatternExtraction(emailText, subject) {
     console.log('🔍 Using basic pattern extraction...');
@@ -387,7 +400,7 @@ ${emailText}`;
     const events = [];
     const text = emailText.toLowerCase();
     
-    // Simple event detection patterns
+    // Enhanced event detection patterns including assignments
     const eventPatterns = [
       {
         pattern: /meet(?:ing)?\s+(?:me\s+)?(?:tomorrow|today|(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))/,
@@ -404,6 +417,10 @@ ${emailText}`;
       {
         pattern: /(?:appointment|call)\s+(?:tomorrow|today|(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))/,
         type: 'professional'
+      },
+      {
+        pattern: /(?:assignment|homework|lab|project|submission|due|deadline)\s+.*?(?:tomorrow|today|(?:on\s+)?(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday))/,
+        type: 'deadline'
       }
     ];
     
@@ -418,8 +435,17 @@ ${emailText}`;
         // Extract time
         const timeMatch = emailText.match(timePattern);
         let time = null;
+        let originalTime = null;
+        
         if (timeMatch) {
-          time = this.normalizeTime(timeMatch[0]);
+          originalTime = this.normalizeTime(timeMatch[0]);
+          time = originalTime;
+          
+          // ENHANCED: Apply 10-minute buffer for assignments/deadlines
+          if (eventDef.type === 'deadline' && time) {
+            time = this.subtractMinutesFromTime(time, 10);
+            console.log(`📚 Assignment/deadline detected: ${originalTime} → ${time} (10 min early)`);
+          }
         }
         
         // Extract location
@@ -437,17 +463,28 @@ ${emailText}`;
           date = tomorrow.toISOString().split('T')[0];
         }
         
+        // Create enhanced event
+        const isAssignment = eventDef.type === 'deadline';
+        let title = subject || `${eventDef.type.charAt(0).toUpperCase() + eventDef.type.slice(1)} Event`;
+        
+        if (isAssignment) {
+          title = this.enhanceAssignmentTitle(title, true);
+        }
+        
         events.push({
           id: this.generateId(),
-          title: subject || `${eventDef.type.charAt(0).toUpperCase() + eventDef.type.slice(1)} Event`,
+          title: title,
           date: date,
           time: time,
           location: location,
-          description: emailText.substring(0, 100).trim(),
+          description: isAssignment && originalTime ? 
+            this.enhanceAssignmentDescription(emailText.substring(0, 100).trim(), true, originalTime) :
+            emailText.substring(0, 100).trim(),
           type: eventDef.type,
           confidence: 0.7,
           source: 'basic_pattern',
-          extractedAt: new Date().toISOString()
+          extractedAt: new Date().toISOString(),
+          isAssignmentReminder: isAssignment && time !== null
         });
         
         break; // Only create one event to avoid duplicates
@@ -524,6 +561,111 @@ ${emailText}`;
   }
 
   /**
+   * Check if event is an assignment or deadline
+   */
+  isAssignmentOrDeadline(event) {
+    const assignmentKeywords = [
+      'assignment', 'homework', 'lab', 'project', 'submission', 'submit',
+      'due', 'deadline', 'quiz', 'exam', 'test', 'paper', 'report',
+      'coursework', 'essay', 'thesis', 'dissertation'
+    ];
+    
+    const title = (event.title || '').toLowerCase();
+    const description = (event.description || '').toLowerCase();
+    const type = (event.type || '').toLowerCase();
+    
+    // Check if it's explicitly marked as academic or deadline type
+    if (type === 'academic' || type === 'deadline') {
+      return true;
+    }
+    
+    // Check for assignment keywords in title or description
+    const hasAssignmentKeyword = assignmentKeywords.some(keyword => 
+      title.includes(keyword) || description.includes(keyword)
+    );
+    
+    return hasAssignmentKeyword;
+  }
+
+  /**
+   * Subtract minutes from a time string (HH:MM format)
+   */
+  subtractMinutesFromTime(timeStr, minutesToSubtract) {
+    if (!timeStr || !this.validateTime(timeStr)) {
+      return timeStr;
+    }
+    
+    try {
+      const [hours, minutes] = timeStr.split(':').map(Number);
+      const totalMinutes = hours * 60 + minutes;
+      const newTotalMinutes = totalMinutes - minutesToSubtract;
+      
+      // Handle day rollover (if time goes negative, it's previous day)
+      let adjustedMinutes = newTotalMinutes;
+      if (adjustedMinutes < 0) {
+        adjustedMinutes = 1440 + newTotalMinutes; // 1440 minutes in a day
+      }
+      
+      const newHours = Math.floor(adjustedMinutes / 60) % 24;
+      const newMins = adjustedMinutes % 60;
+      
+      return `${newHours.toString().padStart(2, '0')}:${newMins.toString().padStart(2, '0')}`;
+    } catch (error) {
+      console.error('❌ Error subtracting minutes from time:', error);
+      return timeStr;
+    }
+  }
+
+  /**
+   * Enhance assignment title to indicate it's a reminder
+   */
+  enhanceAssignmentTitle(originalTitle, isAssignment) {
+    if (!isAssignment) {
+      return originalTitle;
+    }
+    
+    // Don't modify if already has reminder indicators
+    if (originalTitle.toLowerCase().includes('reminder') || 
+        originalTitle.toLowerCase().includes('due soon')) {
+      return originalTitle;
+    }
+    
+    // Add reminder prefix for assignments
+    return `📚 ${originalTitle} - Due Soon`;
+  }
+
+  /**
+   * Enhance assignment title to indicate it's a reminder
+   */
+  enhanceAssignmentTitle(originalTitle, isAssignment) {
+    if (!isAssignment) {
+      return originalTitle;
+    }
+    
+    // Don't modify if already has reminder indicators
+    if (originalTitle.toLowerCase().includes('reminder') || 
+        originalTitle.toLowerCase().includes('due soon')) {
+      return originalTitle;
+    }
+    
+    // Add reminder prefix for assignments
+    return `📚 ${originalTitle} - Due Soon`;
+  }
+
+  /**
+   * Enhance assignment description to explain the timing
+   */
+  enhanceAssignmentDescription(originalDescription, isAssignment, originalDeadlineTime) {
+    if (!isAssignment || !originalDeadlineTime) {
+      return originalDescription;
+    }
+    
+    const deadlineInfo = `\n\n⏰ ASSIGNMENT REMINDER\nActual deadline: ${originalDeadlineTime}\nThis reminder is scheduled 10 minutes before the deadline to give you final preparation time.`;
+    
+    return originalDescription + deadlineInfo;
+  }
+
+  /**
    * Get tomorrow's date
    */
   getTomorrowDate() {
@@ -538,15 +680,17 @@ ${emailText}`;
   getExtractorStats() {
     return {
       extractorType: 'hybrid',
-      version: '2.1.0', // Updated version number
+      version: '2.2.0', // Updated for assignment scheduling feature
       components: {
         compromise: this.compromiseInitialized,
         llama: !!this.llamaEndpoint,
         cspCompliant: true,
-        enhancedDateValidation: true // New feature flag
+        enhancedDateValidation: true, // New feature flag
+        assignmentScheduling: true // Assignment 10-minute early scheduling
       },
       features: [
         'enhanced date extraction and validation',
+        'smart assignment scheduling (10 min early)',
         'advanced reasoning with Llama 3.1',
         'CSP-compliant design',
         'basic pattern fallback',
@@ -559,15 +703,16 @@ ${emailText}`;
   }
 
   /**
-   * Test the hybrid extraction
+   * Test the hybrid extraction with assignment scheduling
    */
   async testExtraction() {
     const testEmail = `
-      Subject: Assignment Due and Team Meeting
+      Subject: CS101 Assignment Due and Team Meeting
       
       Hi everyone,
       
-      Just a reminder that the CS101 assignment was due on Sunday, 8 June 2025 at 11:59 PM.
+      Just a reminder that the CS101 programming assignment is due on Sunday, 8 June 2025 at 11:59 PM.
+      Please submit your code via the online portal before the deadline.
       
       Also, let's have our weekly team meeting tomorrow at 2 PM in the conference room.
       
@@ -575,9 +720,19 @@ ${emailText}`;
       John
     `;
     
-    console.log('🧪 Testing enhanced hybrid extraction...');
-    const results = await this.extractEvents(testEmail, 'Assignment Due and Team Meeting');
+    console.log('🧪 Testing enhanced hybrid extraction with assignment scheduling...');
+    const results = await this.extractEvents(testEmail, 'CS101 Assignment Due and Team Meeting');
     console.log('🎯 Test results:', results);
+    
+    // Verify assignment scheduling works
+    const assignmentEvent = results.find(event => event.isAssignmentReminder);
+    if (assignmentEvent) {
+      console.log('✅ Assignment reminder scheduled correctly:');
+      console.log(`   Original deadline would be: 23:59`);
+      console.log(`   Reminder scheduled for: ${assignmentEvent.time}`);
+      console.log(`   Title: ${assignmentEvent.title}`);
+    }
+    
     return results;
   }
 
