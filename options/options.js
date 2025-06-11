@@ -46,11 +46,16 @@ class OptionsManager {
       });
 
       // Update confidence value display
-      document.getElementById('confidenceValue').textContent = 
-        result.confidenceThreshold;
+      const confidenceValue = document.getElementById('confidenceValue');
+      if (confidenceValue) {
+        confidenceValue.textContent = result.confidenceThreshold;
+      }
 
       // Show/hide API key field based on provider
       this.toggleAPIKeyField(result.aiProvider);
+      
+      // FIXED: Show/hide hybrid settings based on extractor type
+      this.toggleHybridSettings(result.extractorType);
 
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -59,34 +64,88 @@ class OptionsManager {
 
   bindEvents() {
     // AI Provider change
-    document.getElementById('aiProvider').addEventListener('change', (e) => {
-      this.toggleAPIKeyField(e.target.value);
-    });
+    const aiProvider = document.getElementById('aiProvider');
+    if (aiProvider) {
+      aiProvider.addEventListener('change', (e) => {
+        this.toggleAPIKeyField(e.target.value);
+      });
+    }
+
+    // FIXED: Extractor type change - properly bound
+    const extractorType = document.getElementById('extractorType');
+    if (extractorType) {
+      extractorType.addEventListener('change', (e) => {
+        console.log('Extractor type changed to:', e.target.value);
+        this.toggleHybridSettings(e.target.value);
+      });
+    }
 
     // Confidence threshold slider
-    document.getElementById('confidenceThreshold').addEventListener('input', (e) => {
-      document.getElementById('confidenceValue').textContent = e.target.value;
-    });
+    const confidenceThreshold = document.getElementById('confidenceThreshold');
+    if (confidenceThreshold) {
+      confidenceThreshold.addEventListener('input', (e) => {
+        const confidenceValue = document.getElementById('confidenceValue');
+        if (confidenceValue) {
+          confidenceValue.textContent = e.target.value;
+        }
+      });
+    }
 
     // Save settings
-    document.getElementById('saveSettings').addEventListener('click', () => {
-      this.saveSettings();
-    });
+    const saveSettings = document.getElementById('saveSettings');
+    if (saveSettings) {
+      saveSettings.addEventListener('click', () => {
+        this.saveSettings();
+      });
+    }
 
     // Reset settings
-    document.getElementById('resetSettings').addEventListener('click', () => {
-      this.resetSettings();
-    });
+    const resetSettings = document.getElementById('resetSettings');
+    if (resetSettings) {
+      resetSettings.addEventListener('click', () => {
+        this.resetSettings();
+      });
+    }
 
     // Clear data
-    document.getElementById('clearData').addEventListener('click', () => {
-      this.clearAllData();
-    });
+    const clearData = document.getElementById('clearData');
+    if (clearData) {
+      clearData.addEventListener('click', () => {
+        this.clearAllData();
+      });
+    }
   }
 
   toggleAPIKeyField(provider) {
     const apiKeyGroup = document.getElementById('apiKeyGroup');
-    apiKeyGroup.style.display = provider === 'local' ? 'none' : 'block';
+    if (apiKeyGroup) {
+      apiKeyGroup.style.display = provider === 'local' ? 'none' : 'block';
+    }
+  }
+
+  // FIXED: Proper hybrid settings toggle
+  toggleHybridSettings(extractorType) {
+    console.log('Toggling hybrid settings for:', extractorType);
+    
+    const togetherApiKeyGroup = document.getElementById('togetherApiKeyGroup');
+    const hybridModeGroup = document.getElementById('hybridModeGroup');
+    
+    console.log('togetherApiKeyGroup found:', !!togetherApiKeyGroup);
+    console.log('hybridModeGroup found:', !!hybridModeGroup);
+    
+    if (togetherApiKeyGroup && hybridModeGroup) {
+      const showHybridSettings = extractorType === 'hybrid';
+      console.log('Should show hybrid settings:', showHybridSettings);
+      
+      togetherApiKeyGroup.style.display = showHybridSettings ? 'block' : 'none';
+      hybridModeGroup.style.display = showHybridSettings ? 'block' : 'none';
+      
+      // Debug: Log current display status
+      console.log('togetherApiKeyGroup display:', togetherApiKeyGroup.style.display);
+      console.log('hybridModeGroup display:', hybridModeGroup.style.display);
+    } else {
+      console.error('Hybrid settings elements not found!');
+    }
   }
 
   async saveSettings() {
@@ -107,6 +166,7 @@ class OptionsManager {
         }
       });
 
+      console.log('Saving settings:', settings);
       await chrome.storage.sync.set(settings);
       
       // Notify content scripts of settings change
@@ -169,20 +229,22 @@ class OptionsManager {
         const data = await response.json();
         const select = document.getElementById('defaultCalendar');
         
-        // Clear existing options except primary
-        while (select.children.length > 1) {
-          select.removeChild(select.lastChild);
-        }
-
-        // Add calendar options
-        data.items.forEach(calendar => {
-          if (calendar.id !== 'primary') {
-            const option = document.createElement('option');
-            option.value = calendar.id;
-            option.textContent = calendar.summary;
-            select.appendChild(option);
+        if (select) {
+          // Clear existing options except primary
+          while (select.children.length > 1) {
+            select.removeChild(select.lastChild);
           }
-        });
+
+          // Add calendar options
+          data.items.forEach(calendar => {
+            if (calendar.id !== 'primary') {
+              const option = document.createElement('option');
+              option.value = calendar.id;
+              option.textContent = calendar.summary;
+              select.appendChild(option);
+            }
+          });
+        }
       }
     } catch (error) {
       console.error('Error loading calendars:', error);
@@ -200,32 +262,20 @@ class OptionsManager {
 
   showSaveStatus(message, type) {
     const status = document.getElementById('saveStatus');
-    status.textContent = message;
-    status.className = `save-status ${type}`;
-    
-    setTimeout(() => {
-      status.textContent = '';
-      status.className = 'save-status';
-    }, 3000);
-  }
-
-  toggleHybridSettings(extractorType) {
-    const togetherApiKeyGroup = document.getElementById('togetherApiKeyGroup');
-    const hybridModeGroup = document.getElementById('hybridModeGroup');
-    
-    if (togetherApiKeyGroup && hybridModeGroup) {
-      const showHybridSettings = extractorType === 'hybrid';
-      togetherApiKeyGroup.style.display = showHybridSettings ? 'block' : 'none';
-      hybridModeGroup.style.display = showHybridSettings ? 'block' : 'none';
+    if (status) {
+      status.textContent = message;
+      status.className = `save-status ${type}`;
+      
+      setTimeout(() => {
+        status.textContent = '';
+        status.className = 'save-status';
+      }, 3000);
     }
   }
 }
 
 // Initialize options page
 document.addEventListener('DOMContentLoaded', () => {
+  console.log('Initializing OptionsManager...');
   new OptionsManager();
-});
-
-document.getElementById('extractorType').addEventListener('change', (e) => {
-  this.toggleHybridSettings(e.target.value);
 });

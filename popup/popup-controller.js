@@ -1,9 +1,10 @@
 // ============================================================================
-// DEBUG-ENHANCED POPUP CONTROLLER - popup/popup-controller.js
+// ENHANCED POPUP CONTROLLER - popup/popup-controller.js
+// With Built-in Hybrid Support
 // ============================================================================
 
 /**
- * PopupController with enhanced debugging for troubleshooting
+ * PopupController with enhanced debugging and hybrid extractor support
  */
 class PopupController {
   constructor() {
@@ -21,14 +22,13 @@ class PopupController {
     this.handleScanEmail = this.handleScanEmail.bind(this);
     this.handleAddEvent = this.handleAddEvent.bind(this);
     this.handleDeleteEvent = this.handleDeleteEvent.bind(this);
-    // Removed handleEditEvent binding since edit functionality is not needed
   }
 
   /**
    * Initialize with enhanced debugging
    */
   async init() {
-    console.log('🚀 Initializing Popup Controller with debug mode...');
+    console.log('🚀 Initializing Popup Controller with Hybrid AI Support...');
     
     try {
       // Check if all required classes are available
@@ -53,7 +53,7 @@ class PopupController {
       console.log('✅ Popup Controller initialized successfully');
       
       if (this.uiManager) {
-        this.uiManager.showSuccess('Extension ready!');
+        this.uiManager.showSuccess('Hybrid AI Extension ready!');
       }
       
     } catch (error) {
@@ -70,6 +70,7 @@ class PopupController {
       'UIManager': typeof UIManager !== 'undefined',
       'BasicEventExtractor': typeof BasicEventExtractor !== 'undefined',
       'EnhancedNLPExtractor': typeof EnhancedNLPExtractor !== 'undefined',
+      'HybridEventExtractor': typeof HybridEventExtractor !== 'undefined',
       'EmailScanner': typeof EmailScanner !== 'undefined',
       'CalendarIntegrator': typeof CalendarIntegrator !== 'undefined',
       'EventStorageManager': typeof EventStorageManager !== 'undefined'
@@ -82,14 +83,15 @@ class PopupController {
       .map(([name]) => name);
     
     if (missingClasses.length > 0) {
-      throw new Error(`Missing required classes: ${missingClasses.join(', ')}`);
+      console.warn(`⚠️ Missing classes: ${missingClasses.join(', ')}`);
+      // Don't throw error, just warn - we'll handle graceful fallbacks
+    } else {
+      console.log('✅ All required classes are available');
     }
-    
-    console.log('✅ All required classes are available');
   }
 
   /**
-   * Load settings with defaults
+   * Load settings with hybrid defaults
    */
   async loadSettings() {
     try {
@@ -98,27 +100,34 @@ class PopupController {
         'autoAddEvents',
         'autoDetection',
         'confidenceThreshold',
-        'debugMode'
+        'debugMode',
+        'togetherApiKey',
+        'hybridMode'
       ]);
       
       this.currentSettings = {
-        extractorType: settings.extractorType || 'enhanced', // Use basic as default for debugging
+        extractorType: settings.extractorType || 'hybrid', // Default to hybrid
         autoAddEvents: settings.autoAddEvents === true,
         autoDetection: settings.autoDetection !== false,
-        confidenceThreshold: settings.confidenceThreshold || 0.5, // Lower threshold for debugging
-        debugMode: settings.debugMode !== false // Enable debug mode by default
+        confidenceThreshold: settings.confidenceThreshold || 0.6, // Slightly higher for hybrid
+        debugMode: settings.debugMode !== false,
+        togetherApiKey: settings.togetherApiKey || '',
+        hybridMode: settings.hybridMode || 'compromise_first'
       };
       
-      console.log('⚙️ Settings loaded:', this.currentSettings);
+      console.log('⚙️ Settings loaded with hybrid support:', this.currentSettings);
       
     } catch (error) {
       console.error('❌ Failed to load settings:', error);
+      // Fallback settings with hybrid as default
       this.currentSettings = {
-        extractorType: 'basic',
+        extractorType: 'hybrid',
         autoAddEvents: false,
         autoDetection: true,
-        confidenceThreshold: 0.5,
-        debugMode: true
+        confidenceThreshold: 0.6,
+        debugMode: true,
+        togetherApiKey: '',
+        hybridMode: 'compromise_first'
       };
     }
   }
@@ -134,7 +143,7 @@ class PopupController {
       this.uiManager = new UIManager();
       console.log('✅ UIManager initialized');
       
-      // Initialize extractor
+      // Initialize extractor with hybrid support
       this.extractor = this.createExtractor(this.currentSettings.extractorType);
       console.log(`✅ ${this.currentSettings.extractorType} extractor initialized`);
       
@@ -157,7 +166,7 @@ class PopupController {
   }
 
   /**
-   * Create extractor with fallback
+   * Create extractor with hybrid option - ENHANCED VERSION
    */
   createExtractor(extractorType) {
     console.log(`🔧 Creating ${extractorType} extractor...`);
@@ -169,12 +178,14 @@ class PopupController {
             console.warn('HybridEventExtractor not available, falling back to enhanced');
             return this.createFallbackExtractor();
           }
+          console.log('✅ Creating Hybrid (Compromise.js + Llama 3.1) extractor');
           return new HybridEventExtractor();
         
         case 'basic':
           if (typeof BasicEventExtractor === 'undefined') {
             throw new Error('BasicEventExtractor not available');
           }
+          console.log('✅ Creating Basic pattern-matching extractor');
           return new BasicEventExtractor();
         
         case 'enhanced':
@@ -182,11 +193,12 @@ class PopupController {
             console.warn('EnhancedNLPExtractor not available, falling back to basic');
             return new BasicEventExtractor();
           }
+          console.log('✅ Creating Enhanced NLP extractor');
           return new EnhancedNLPExtractor();
         
         default:
-          console.warn(`Unknown extractor type: ${extractorType}, using hybrid`);
-          return new HybridEventExtractor();
+          console.warn(`Unknown extractor type: ${extractorType}, using hybrid as default`);
+          return this.createExtractor('hybrid'); // Try hybrid first
       }
     } catch (error) {
       console.error('❌ Failed to create extractor:', error);
@@ -195,8 +207,21 @@ class PopupController {
     }
   }
 
+  /**
+   * Enhanced fallback extractor with hybrid priority
+   */
   createFallbackExtractor() {
+    // Fallback chain: hybrid -> enhanced -> basic
+    if (typeof HybridEventExtractor !== 'undefined') {
+      console.log('🔄 Fallback: Using Hybrid extractor');
+      return new HybridEventExtractor();
+    }
+    if (typeof EnhancedNLPExtractor !== 'undefined') {
+      console.log('🔄 Fallback: Using Enhanced NLP extractor');
+      return new EnhancedNLPExtractor();
+    }
     if (typeof BasicEventExtractor !== 'undefined') {
+      console.log('🔄 Fallback: Using Basic extractor');
       return new BasicEventExtractor();
     }
     throw new Error('No extractors available');
@@ -236,7 +261,7 @@ class PopupController {
       console.error('❌ Scan button not found');
     }
     
-    // Other handlers...
+    // Settings button
     if (this.uiManager && this.uiManager.elements.openSettings) {
       this.uiManager.elements.openSettings.addEventListener('click', () => {
         chrome.runtime.openOptionsPage();
@@ -245,10 +270,10 @@ class PopupController {
   }
 
   /**
-   * Enhanced email scanning with detailed debugging
+   * Enhanced email scanning with hybrid AI processing
    */
   async handleScanEmail() {
-    console.log('📧 🔍 Starting enhanced email scan with debugging...');
+    console.log('📧 🧠 Starting hybrid AI email scan...');
     
     try {
       // Step 1: Verify we're on Gmail
@@ -259,20 +284,21 @@ class PopupController {
         throw new Error('Not on Gmail - please navigate to Gmail first');
       }
 
-      // Step 2: Update UI
-      this.uiManager.setScanButtonState(true);
+      // Step 2: Update UI with hybrid processing indicator
+      const isHybrid = this.currentSettings.extractorType === 'hybrid';
+      this.uiManager.setScanButtonState(true, isHybrid ? `
+        <span class="btn-icon">🧠</span>
+        <span class="btn-label">Hybrid AI Processing</span>
+      ` : null);
 
-      // Step 3: Create a simple, reliable scanner function
-      console.log('🔧 Creating scanner function...');
-
+      // Step 3: Enhanced scanner with proper extractor integration
       const results = await chrome.scripting.executeScript({
         target: { tabId: tab.id },
         function: () => {
-          // Simple scanner that logs everything
-          console.log('🔍 Scanner injected into Gmail page');
+          console.log('🔍 Enhanced scanner injected into Gmail page');
           
           try {
-            // Try multiple selectors for email content
+            // Extract email content using multiple selectors
             const selectors = [
               '[role="main"] [dir="ltr"]',
               '.ii.gt div',
@@ -286,27 +312,19 @@ class PopupController {
             let foundSelector = '';
             
             for (const selector of selectors) {
-              console.log(`🔍 Trying selector: ${selector}`);
               const elements = document.querySelectorAll(selector);
               console.log(`📊 Found ${elements.length} elements with selector: ${selector}`);
               
               for (const element of elements) {
                 const text = element.textContent || element.innerText || '';
-                console.log(`📝 Element text length: ${text.length}`);
-                
-                if (text.length > 50) { // Minimum meaningful content
+                if (text.length > 50) {
                   emailText = text;
                   foundSelector = selector;
                   break;
                 }
               }
-              
               if (emailText) break;
             }
-            
-            console.log(`📧 Email text extracted: ${emailText.length} characters`);
-            console.log(`🎯 Using selector: ${foundSelector}`);
-            console.log(`📖 Preview: ${emailText.substring(0, 200)}...`);
             
             // Extract subject
             const subjectSelectors = [
@@ -322,81 +340,29 @@ class PopupController {
               const element = document.querySelector(selector);
               if (element && element.textContent) {
                 subject = element.textContent.trim();
-                console.log(`📧 Subject found with ${selector}: ${subject}`);
                 break;
               }
             }
             
             if (!emailText) {
-              console.error('❌ No email content found');
               return { 
                 success: false, 
-                error: 'No email content found',
-                debug: {
-                  selectorsChecked: selectors.length,
-                  elementsFound: selectors.map(sel => document.querySelectorAll(sel).length)
-                }
+                error: 'No email content found'
               };
             }
             
-            // Simple pattern-based event detection
-            console.log('🔍 Starting simple event detection...');
+            console.log(`📧 Email extracted: ${emailText.length} chars`);
+            console.log(`📧 Subject: "${subject}"`);
             
-            const events = [];
-            const eventKeywords = ['meeting', 'lunch', 'dinner', 'call', 'appointment', 'conference'];
-            const timeKeywords = ['today', 'tomorrow', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'am', 'pm', ':'];
-            
-            const sentences = emailText.split(/[.!?]+/).filter(s => s.length > 10);
-            console.log(`📝 Processing ${sentences.length} sentences`);
-            
-            sentences.forEach((sentence, index) => {
-              const lowerSentence = sentence.toLowerCase();
-              console.log(`📝 Sentence ${index + 1}: ${sentence.substring(0, 100)}...`);
-              
-              const hasEventKeyword = eventKeywords.some(keyword => {
-                const found = lowerSentence.includes(keyword);
-                if (found) console.log(`🎯 Found event keyword: ${keyword}`);
-                return found;
-              });
-              
-              const hasTimeKeyword = timeKeywords.some(keyword => {
-                const found = lowerSentence.includes(keyword);
-                if (found) console.log(`⏰ Found time keyword: ${keyword}`);
-                return found;
-              });
-              
-              if (hasEventKeyword || hasTimeKeyword) {
-                console.log(`✅ Potential event detected in sentence ${index + 1}`);
-                
-                // Extract basic details
-                const timeMatch = sentence.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
-                const dateMatch = sentence.match(/(today|tomorrow|monday|tuesday|wednesday|thursday|friday|saturday|sunday)/i);
-                
-                const event = {
-                  id: Date.now() + Math.random(),
-                  title: subject || `Event from email`,
-                  date: dateMatch ? dateMatch[0] : new Date().toISOString().split('T')[0],
-                  time: timeMatch ? timeMatch[0] : null,
-                  description: sentence.trim(),
-                  confidence: hasEventKeyword && hasTimeKeyword ? 0.8 : 0.5,
-                  source: 'simple_scanner'
-                };
-                
-                console.log(`📅 Created event:`, event);
-                events.push(event);
-              }
-            });
-            
-            console.log(`🎯 Final result: ${events.length} events detected`);
-            
+            // Return data for processing with the selected extractor
             return {
               success: true,
-              events: events,
-              debug: {
+              emailText: emailText,
+              subject: subject,
+              metadata: {
                 emailLength: emailText.length,
-                subject: subject,
-                sentenceCount: sentences.length,
-                foundSelector: foundSelector
+                foundSelector: foundSelector,
+                extractedAt: new Date().toISOString()
               }
             };
             
@@ -404,10 +370,7 @@ class PopupController {
             console.error('❌ Scanner error:', error);
             return {
               success: false,
-              error: error.message,
-              debug: {
-                errorStack: error.stack
-              }
+              error: error.message
             };
           }
         }
@@ -415,24 +378,28 @@ class PopupController {
 
       console.log('📊 Scanner execution results:', results);
 
-      // Step 4: Process results
-      if (results && results[0] && results[0].result) {
-        const result = results[0].result;
-        console.log('📊 Scanner result:', result);
+      // Step 4: Process with the configured extractor (hybrid/enhanced/basic)
+      if (results && results[0] && results[0].result && results[0].result.success) {
+        const { emailText, subject, metadata } = results[0].result;
+        console.log('📊 Email extracted, processing with extractor...');
         
-        if (result.success && result.events && result.events.length > 0) {
-          console.log(`✅ Found ${result.events.length} events:`, result.events);
-          await this.processDetectedEvents(result.events);
-        } else if (result.success && (!result.events || result.events.length === 0)) {
-          console.log('ℹ️ No events detected in email');
-          this.uiManager.showInfo('No events detected in this email');
+        // Use the configured extractor (could be hybrid, enhanced, or basic)
+        if (this.extractor && typeof this.extractor.extractEvents === 'function') {
+          console.log(`🎯 Using ${this.currentSettings.extractorType} extractor`);
+          const events = await this.extractor.extractEvents(emailText, subject);
+          console.log(`🎯 ${this.currentSettings.extractorType} extractor found ${events.length} events:`, events);
+          
+          if (events.length > 0) {
+            await this.processDetectedEvents(events);
+          } else {
+            this.uiManager.showInfo('No events detected in this email');
+          }
         } else {
-          console.error('❌ Scanner failed:', result.error);
-          this.uiManager.showError(`Scanner failed: ${result.error}`);
+          throw new Error('Extractor not available');
         }
       } else {
-        console.error('❌ No results from scanner');
-        this.uiManager.showError('Scanner returned no results');
+        const error = results?.[0]?.result?.error || 'Failed to extract email content';
+        throw new Error(error);
       }
 
     } catch (error) {
@@ -470,8 +437,10 @@ class PopupController {
         );
       }
       
-      // Show success message
-      this.uiManager.showSuccess(`🎯 Detected ${events.length} event${events.length > 1 ? 's' : ''} - Click ➕ to add to calendar`);
+      // Show success message with extractor type
+      const extractorName = this.currentSettings.extractorType === 'hybrid' ? 'Hybrid AI' : 
+                           this.currentSettings.extractorType === 'enhanced' ? 'Enhanced NLP' : 'Basic';
+      this.uiManager.showSuccess(`🎯 ${extractorName} detected ${events.length} event${events.length > 1 ? 's' : ''} - Click ➕ to add to calendar`);
       
     } catch (error) {
       console.error('❌ Failed to process events:', error);
@@ -550,23 +519,64 @@ class PopupController {
   }
 
   /**
-   * Setup debug functions
+   * Setup debug functions for testing
    */
   setupDebugFunctions() {
     window.popupController = this;
     
     window.debugFunctions = {
+      testHybridExtraction: () => this.testHybridExtraction(),
       testSimpleExtraction: () => this.testSimpleExtraction(),
       scanCurrentEmail: () => this.handleScanEmail(),
       checkModules: () => this.checkModules(),
-      getApplicationState: () => this.getApplicationState()
+      getApplicationState: () => this.getApplicationState(),
+      switchExtractor: (type) => this.switchExtractor(type)
     };
     
     console.log('🔧 Debug functions available:');
+    console.log('  - debugFunctions.testHybridExtraction()');
     console.log('  - debugFunctions.testSimpleExtraction()');
     console.log('  - debugFunctions.scanCurrentEmail()');
     console.log('  - debugFunctions.checkModules()');
     console.log('  - debugFunctions.getApplicationState()');
+    console.log('  - debugFunctions.switchExtractor("hybrid|enhanced|basic")');
+  }
+
+  /**
+   * Test hybrid extraction specifically
+   */
+  async testHybridExtraction() {
+    console.log('🧪 Testing hybrid extraction...');
+    
+    if (typeof HybridEventExtractor === 'undefined') {
+      console.error('❌ HybridEventExtractor not available');
+      return [];
+    }
+
+    const hybridExtractor = new HybridEventExtractor();
+    const testEmail = `
+      Subject: Team Meeting and Assignment Due
+      
+      Hi everyone,
+      
+      Let's have our weekly team meeting tomorrow at 2 PM in the conference room.
+      
+      Also, don't forget that the CS101 assignment is due on Monday, December 9th at 11:59 PM.
+      
+      After the meeting, would anyone like to grab coffee?
+      
+      Best regards,
+      John
+    `;
+    
+    try {
+      const events = await hybridExtractor.extractEvents(testEmail, 'Team Meeting and Assignment Due');
+      console.log('🎯 Hybrid test results:', events);
+      return events;
+    } catch (error) {
+      console.error('❌ Hybrid test failed:', error);
+      return [];
+    }
   }
 
   /**
@@ -592,16 +602,41 @@ class PopupController {
   }
 
   /**
+   * Switch extractor type for testing
+   */
+  async switchExtractor(type) {
+    console.log(`🔄 Switching to ${type} extractor...`);
+    
+    try {
+      this.currentSettings.extractorType = type;
+      this.extractor = this.createExtractor(type);
+      
+      // Save setting
+      await chrome.storage.sync.set({ extractorType: type });
+      
+      console.log(`✅ Switched to ${type} extractor`);
+      this.uiManager.showSuccess(`Switched to ${type} extractor`);
+    } catch (error) {
+      console.error('❌ Failed to switch extractor:', error);
+      this.uiManager.showError('Failed to switch extractor');
+    }
+  }
+
+  /**
    * Check module status
    */
   checkModules() {
     const moduleStatus = {
       uiManager: !!this.uiManager,
       extractor: !!this.extractor,
+      extractorType: this.currentSettings.extractorType,
       scanner: !!this.scanner,
       calendarIntegrator: !!this.calendarIntegrator,
       storageManager: !!this.storageManager,
-      isInitialized: this.isInitialized
+      isInitialized: this.isInitialized,
+      hybridAvailable: typeof HybridEventExtractor !== 'undefined',
+      enhancedAvailable: typeof EnhancedNLPExtractor !== 'undefined',
+      basicAvailable: typeof BasicEventExtractor !== 'undefined'
     };
     
     console.log('📊 Module Status:', moduleStatus);
@@ -616,19 +651,28 @@ class PopupController {
       isInitialized: this.isInitialized,
       currentSettings: this.currentSettings,
       modules: this.checkModules(),
-      debugMode: this.debugMode
+      debugMode: this.debugMode,
+      version: '1.0.0-hybrid'
     };
   }
 }
 
-// Initialize when DOM is ready
+// Initialize with the enhanced hybrid controller
 document.addEventListener('DOMContentLoaded', async function() {
-  console.log('🚀 Starting Email2Calendar with debug mode...');
+  console.log('🚀 Starting Email2Calendar with Hybrid AI Support...');
   
   try {
+    // Use the enhanced PopupController with built-in hybrid support
     const popupController = new PopupController();
     await popupController.init();
-    console.log('✅ Email2Calendar ready!');
+    
+    console.log('✅ Email2Calendar with Hybrid AI ready!');
+    
+    // Optional: Run a quick test
+    if (typeof HybridEventExtractor !== 'undefined') {
+      console.log('🧠 Hybrid AI extractor available and ready');
+    }
+    
   } catch (error) {
     console.error('💥 Failed to initialize:', error);
   }
