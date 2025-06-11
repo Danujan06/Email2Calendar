@@ -16,6 +16,31 @@
       <section class="settings-section">
         <h2>🤖 AI Configuration</h2>
         <div class="setting-group">
+          <label for="extractorType">AI Extractor Type:</label>
+          <select id="extractorType">
+            <option value="hybrid">🧠 Hybrid (Compromise.js + Llama 3.1)</option>
+            <option value="enhanced">🔧 Enhanced NLP</option>
+            <option value="basic">⚡ Basic Pattern Matching</option>
+          </select>
+          <small>Hybrid uses fast NLP + AI for best accuracy</small>
+        </div>
+
+        <div class="setting-group" id="togetherApiKeyGroup" style="display: none;">
+          <label for="togetherApiKey">Together AI API Key:</label>
+          <input type="password" id="togetherApiKey" placeholder="Enter Together AI API key">
+          <small>Required for Llama 3.1 processing. Get one free at <a href="https://api.together.xyz" target="_blank">Together AI</a></small>
+        </div>
+
+        <div class="setting-group" id="hybridModeGroup" style="display: none;">
+          <label for="hybridMode">Hybrid Processing Mode:</label>
+          <select id="hybridMode">
+            <option value="compromise_first">⚡ Compromise.js First (Faster)</option>
+            <option value="llama_first">🧠 Llama 3.1 First (More Accurate)</option>
+            <option value="parallel">🚀 Parallel Processing (Best Quality)</option>
+          </select>
+          <small>Choose processing strategy for hybrid extraction</small>
+        </div>
+        <div class="setting-group">
           <label for="aiProvider">AI Provider:</label>
           <select id="aiProvider">
             <option value="local">Local Processing Only</option>
