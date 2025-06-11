@@ -436,6 +436,46 @@
             opacity: 1;
             transform: translateY(0);
         }
+        .video-embed {
+            width: 100%;
+            height: 250px;
+            border-radius: 15px 15px 0 0;
+            overflow: hidden;
+            background: #f0f0f0;
+        }
+
+        .video-embed iframe {
+            border-radius: 15px 15px 0 0;
+            border: none;
+        }
+
+        /* Remove the old video-placeholder styles since we're using real videos now */
+        .video-placeholder {
+            display: none; /* Hide old placeholder */
+        }
+
+        /* Responsive video styling */
+        @media (max-width: 768px) {
+            .video-embed {
+                height: 200px;
+            }
+            
+            .video-embed iframe {
+                height: 200px;
+            }
+        }
+
+        /* Video loading state */
+        .video-embed::before {
+            content: "Loading video...";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #666;
+            font-size: 14px;
+            z-index: -1;
+        }
     </style>
 </head>
 <body>
@@ -509,30 +549,54 @@
             <h2 class="section-title scroll-animate">🎬 See Schedly in Action</h2>
             <div class="videos-grid">
                 <div class="video-card scroll-animate">
-                    <div class="video-placeholder" onclick="playDemo(1)">
-                        ▶️
+                    <div class="video-embed">
+                        <iframe 
+                            width="100%" 
+                            height="250" 
+                            src="https://www.youtube.com/embed/xcFz8Ztr1u4?si=AUIvvFd6EILs-SM7" 
+                            title="Academic Assignment Detection Demo"
+                            frameborder="0" 
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                            allowfullscreen>
+                        </iframe>
                     </div>
                     <div class="video-content">
-                        <h3>Basic Event Extraction</h3>
-                        <p>Watch how Schedly automatically detects simple meeting invitations and social events from your emails</p>
+                        <h3>Academic Assignment Detection</h3>
+                        <p>Watch Schedly extract a university assignment deadline from a course notification email, automatically scheduling a reminder 10 minutes before the due time</p>
                     </div>
                 </div>
                 <div class="video-card scroll-animate">
-                    <div class="video-placeholder" onclick="playDemo(2)">
-                        ▶️
+                    <div class="video-embed">
+                        <iframe 
+                            width="100%" 
+                            height="250" 
+                            src="https://www.youtube.com/embed/YOUR_VIDEO_ID_2" 
+                            title="Simple Meeting Extraction Demo"
+                            frameborder="0" 
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                            allowfullscreen>
+                        </iframe>
                     </div>
                     <div class="video-content">
-                        <h3>AI-Powered Complex Extraction</h3>
-                        <p>See the hybrid AI in action extracting complex academic deadlines and multi-event emails</p>
+                        <h3>Simple Meeting Extraction</h3>
+                        <p>See how Schedly detects a casual meeting invitation and extracts the location, date, and time details automatically</p>
                     </div>
                 </div>
                 <div class="video-card scroll-animate">
-                    <div class="video-placeholder" onclick="playDemo(3)">
-                        ▶️
+                    <div class="video-embed">
+                        <iframe 
+                            width="100%" 
+                            height="250" 
+                            src="https://www.youtube.com/embed/YOUR_VIDEO_ID_3" 
+                            title="Settings & Configuration Demo"
+                            frameborder="0" 
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                            allowfullscreen>
+                        </iframe>
                     </div>
                     <div class="video-content">
-                        <h3>Calendar Integration & Management</h3>
-                        <p>Learn how to add events to Google Calendar and manage your detected events efficiently</p>
+                        <h3>Settings & Configuration</h3>
+                        <p>Learn how to configure Schedly's AI extraction modes, set confidence thresholds, and customize your event detection preferences</p>
                     </div>
                 </div>
             </div>
