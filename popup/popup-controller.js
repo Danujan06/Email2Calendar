@@ -164,6 +164,13 @@ class PopupController {
     
     try {
       switch (extractorType.toLowerCase()) {
+        case 'hybrid':
+          if (typeof HybridEventExtractor === 'undefined') {
+            console.warn('HybridEventExtractor not available, falling back to enhanced');
+            return this.createFallbackExtractor();
+          }
+          return new HybridEventExtractor();
+        
         case 'basic':
           if (typeof BasicEventExtractor === 'undefined') {
             throw new Error('BasicEventExtractor not available');
@@ -178,14 +185,21 @@ class PopupController {
           return new EnhancedNLPExtractor();
         
         default:
-          console.warn(`Unknown extractor type: ${extractorType}, using basic`);
-          return new BasicEventExtractor();
+          console.warn(`Unknown extractor type: ${extractorType}, using hybrid`);
+          return new HybridEventExtractor();
       }
     } catch (error) {
       console.error('❌ Failed to create extractor:', error);
       console.log('🔄 Falling back to basic extractor');
+      return this.createFallbackExtractor();
+    }
+  }
+
+  createFallbackExtractor() {
+    if (typeof BasicEventExtractor !== 'undefined') {
       return new BasicEventExtractor();
     }
+    throw new Error('No extractors available');
   }
 
   /**
