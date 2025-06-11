@@ -18,7 +18,9 @@
   "host_permissions": [
     "https://mail.google.com/*",
     "https://www.googleapis.com/*",
-    "https://cdn.jsdelivr.net/*"
+    "https://cdn.jsdelivr.net/*",
+    "https://api.together.xyz/*",
+    "https://unpkg.com/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -28,6 +30,9 @@
       "matches": ["https://mail.google.com/*"],
       "js": ["lib/date-parser.js", "lib/event-extractor.js", "content.js","popup/modules/extractors/basic-extractor.js",
       "popup/modules/extractors/enhanced-nlp-extractor.js", 
+      "popup/modules/extractors/basic-extractor.js",
+      "popup/modules/extractors/enhanced-nlp-extractor.js",
+      "popup/modules/extractors/hybrid-extractor.js",
       "popup/modules/email-scanner.js",
       "popup/modules/calendar-integrator.js",
       "popup/modules/storage-manager.js",
