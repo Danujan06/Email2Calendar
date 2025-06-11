@@ -1,10 +1,11 @@
 // ============================================================================
-// HYBRID LLAMA 3.1 EVENT EXTRACTOR (CSP-COMPLIANT VERSION)
+// HYBRID LLAMA 3.1 EVENT EXTRACTOR (ENHANCED DATE EXTRACTION VERSION)
 // ============================================================================
 
 /**
  * HybridEventExtractor uses Llama 3.1 for advanced semantic understanding
  * with fallback to basic pattern matching (Compromise.js removed due to CSP)
+ * ENHANCED with better date extraction and validation
  */
 class HybridEventExtractor {
   constructor() {
@@ -68,7 +69,7 @@ class HybridEventExtractor {
       console.log('⚠️ Skipping Compromise.js due to CSP restrictions');
       
       // Go directly to Llama 3.1 extraction
-      console.log('🧠 Using Llama 3.1 for extraction...');
+      console.log('🧠 Using enhanced Llama 3.1 for extraction...');
       
       try {
         const llamaResults = await this.extractWithLlamaOnly(emailText, subject);
@@ -101,7 +102,7 @@ class HybridEventExtractor {
    * Extract events using Llama 3.1 only (main method)
    */
   async extractWithLlamaOnly(emailText, subject) {
-    console.log('🧠 Direct extraction with Llama 3.1...');
+    console.log('🧠 Direct extraction with enhanced Llama 3.1...');
     
     const prompt = this.buildLlamaExtractionPrompt(emailText, subject);
     const response = await this.callLlama(prompt);
@@ -110,17 +111,32 @@ class HybridEventExtractor {
   }
 
   /**
-   * Build prompt for Llama 3.1 direct extraction
+   * Build enhanced prompt for Llama 3.1 direct extraction with better date handling
+   * ENHANCED VERSION FROM FIX FILE
    */
   buildLlamaExtractionPrompt(emailText, subject) {
-    return `Extract calendar events from this email. Be precise and conservative.
+    return `You are an expert at extracting calendar events from emails. Read this email carefully and extract ONLY the events mentioned.
 
 Subject: ${subject}
 
-Content:
+Email Content:
 ${emailText}
 
-Find events like meetings, appointments, deadlines, social events, classes, etc.
+CRITICAL INSTRUCTIONS FOR DATE EXTRACTION:
+- Read the email text VERY CAREFULLY for exact dates
+- Look for patterns like "due on Sunday, 8 June 2025" or "was due on [specific date]"
+- DO NOT make up dates - use EXACTLY what's written in the email
+- If the email says "Sunday, 8 June 2025" then the date should be 2025-06-08
+- If the email says "was due on" or "due on", extract that EXACT date
+- Pay attention to day names and match them correctly with dates
+
+EXAMPLES:
+- "due on Sunday, 8 June 2025" → date: "2025-06-08"
+- "meeting tomorrow" → date: "${this.getTomorrowDate()}"
+- "call today at 3pm" → date: "${new Date().toISOString().split('T')[0]}"
+
+Current date for reference: ${new Date().toISOString().split('T')[0]}
+Tomorrow's date: ${this.getTomorrowDate()}
 
 Return ONLY a JSON array in this exact format:
 [
@@ -137,13 +153,15 @@ Return ONLY a JSON array in this exact format:
   }
 ]
 
-Rules:
+VALIDATION RULES:
 - Only include events with clear date/time information
-- Use today's date (${new Date().toISOString().split('T')[0]}) as reference
-- For "tomorrow", use ${this.getTomorrowDate()}
-- Convert times to 24-hour format (HH:MM)
+- Convert times to 24-hour format (11:59 PM = 23:59)
 - Be conservative with confidence scores
-- If no clear events, return []`;
+- If no clear events, return []
+- Double-check the date against what's written in the email
+
+Email to analyze:
+${emailText}`;
   }
 
   /**
@@ -219,6 +237,145 @@ Rules:
       console.warn('⚠️ Could not retrieve API key:', error);
       return null;
     }
+  }
+
+  /**
+   * Enhanced Llama response parsing with date validation
+   * ENHANCED VERSION FROM FIX FILE
+   */
+  parseLlamaResponse(response) {
+    try {
+      console.log('📄 Raw AI response:', response);
+      
+      // Clean the response - extract JSON array
+      let cleanResponse = response.trim();
+      
+      // Find JSON array in response
+      const jsonMatch = cleanResponse.match(/\[[\s\S]*?\]/);
+      if (jsonMatch) {
+        cleanResponse = jsonMatch[0];
+      }
+      
+      // Parse JSON
+      const events = JSON.parse(cleanResponse);
+      
+      if (!Array.isArray(events)) {
+        console.warn('⚠️ Llama response is not an array');
+        return [];
+      }
+      
+      // Validate and clean each event with enhanced date checking
+      const validatedEvents = events
+        .filter(event => event && typeof event === 'object')
+        .map(event => {
+          const validatedDate = this.validateDate(event.date);
+          const validatedTime = this.validateTime(event.time);
+          
+          if (!validatedDate) {
+            console.warn('⚠️ Skipping event with invalid date:', event);
+            return null;
+          }
+          
+          const cleanedEvent = {
+            id: event.id || this.generateId(),
+            title: event.title || 'Event',
+            date: validatedDate,
+            time: validatedTime,
+            location: event.location || null,
+            description: event.description || '',
+            type: event.type || 'general',
+            confidence: Math.min(Math.max(event.confidence || 0.5, 0), 1),
+            source: event.source || 'llama',
+            extractedAt: new Date().toISOString()
+          };
+          
+          console.log('✅ Validated event:', cleanedEvent);
+          return cleanedEvent;
+        })
+        .filter(event => event !== null); // Remove invalid events
+          
+      console.log(`📊 Final validated events: ${validatedEvents.length}/${events.length}`);
+      return validatedEvents;
+          
+    } catch (error) {
+      console.error('❌ Failed to parse Llama response:', error);
+      console.log('Raw response for debugging:', response);
+      return [];
+    }
+  }
+
+  /**
+   * Enhanced date validation with better error detection
+   * ENHANCED VERSION FROM FIX FILE
+   */
+  validateDate(dateStr) {
+    if (!dateStr) return null;
+    
+    console.log('🔍 Validating date:', dateStr);
+    
+    // If already in YYYY-MM-DD format, validate it's reasonable
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        // Check if date is reasonable (not too far in past/future)
+        const now = new Date();
+        const oneYearAgo = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate());
+        const twoYearsFromNow = new Date(now.getFullYear() + 2, now.getMonth(), now.getDate());
+        
+        if (date >= oneYearAgo && date <= twoYearsFromNow) {
+          console.log('✅ Date validation passed:', dateStr);
+          return dateStr;
+        } else {
+          console.warn('⚠️ Date outside reasonable range:', dateStr);
+          return dateStr; // Still return it, but warn
+        }
+      }
+    }
+    
+    try {
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        const result = date.toISOString().split('T')[0];
+        console.log('✅ Date parsed and validated:', result);
+        return result;
+      }
+    } catch (error) {
+      console.warn('⚠️ Invalid date:', dateStr);
+    }
+    
+    return null;
+  }
+
+  /**
+   * Validate and normalize time
+   */
+  validateTime(timeStr) {
+    if (!timeStr) return null;
+    
+    // If already in HH:MM format
+    if (/^\d{2}:\d{2}$/.test(timeStr)) {
+      return timeStr;
+    }
+    
+    // Parse various formats
+    const timeMatch = timeStr.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
+    if (timeMatch) {
+      let hours = parseInt(timeMatch[1]);
+      const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+      const ampm = timeMatch[3]?.toLowerCase();
+      
+      if (ampm && ampm.includes('pm') && hours !== 12) {
+        hours += 12;
+      } else if (ampm && ampm.includes('am') && hours === 12) {
+        hours = 0;
+      }
+      
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+      }
+    }
+    
+    return null;
   }
 
   /**
@@ -322,107 +479,6 @@ Rules:
   }
 
   /**
-   * Parse Llama 3.1 JSON response
-   */
-  parseLlamaResponse(response) {
-    try {
-      // Clean the response - extract JSON array
-      let cleanResponse = response.trim();
-      
-      // Find JSON array in response
-      const jsonMatch = cleanResponse.match(/\[[\s\S]*?\]/);
-      if (jsonMatch) {
-        cleanResponse = jsonMatch[0];
-      }
-      
-      // Parse JSON
-      const events = JSON.parse(cleanResponse);
-      
-      if (!Array.isArray(events)) {
-        console.warn('⚠️ Llama response is not an array');
-        return [];
-      }
-      
-      // Validate and clean each event
-      return events
-        .filter(event => event && typeof event === 'object')
-        .map(event => ({
-          id: event.id || this.generateId(),
-          title: event.title || 'Event',
-          date: this.validateDate(event.date),
-          time: this.validateTime(event.time),
-          location: event.location || null,
-          description: event.description || '',
-          type: event.type || 'general',
-          confidence: Math.min(Math.max(event.confidence || 0.5, 0), 1),
-          source: event.source || 'llama',
-          extractedAt: new Date().toISOString()
-        }))
-        .filter(event => event.date); // Only keep events with valid dates
-        
-    } catch (error) {
-      console.error('❌ Failed to parse Llama response:', error);
-      console.log('Raw response:', response);
-      return [];
-    }
-  }
-
-  /**
-   * Validate and normalize date
-   */
-  validateDate(dateStr) {
-    if (!dateStr) return null;
-    
-    // If already in YYYY-MM-DD format
-    if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-      return dateStr;
-    }
-    
-    try {
-      const date = new Date(dateStr);
-      if (!isNaN(date.getTime())) {
-        return date.toISOString().split('T')[0];
-      }
-    } catch (error) {
-      console.warn('⚠️ Invalid date:', dateStr);
-    }
-    
-    return null;
-  }
-
-  /**
-   * Validate and normalize time
-   */
-  validateTime(timeStr) {
-    if (!timeStr) return null;
-    
-    // If already in HH:MM format
-    if (/^\d{2}:\d{2}$/.test(timeStr)) {
-      return timeStr;
-    }
-    
-    // Parse various formats
-    const timeMatch = timeStr.match(/(\d{1,2}):?(\d{2})?\s*(am|pm)?/i);
-    if (timeMatch) {
-      let hours = parseInt(timeMatch[1]);
-      const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
-      const ampm = timeMatch[3]?.toLowerCase();
-      
-      if (ampm && ampm.includes('pm') && hours !== 12) {
-        hours += 12;
-      } else if (ampm && ampm.includes('am') && hours === 12) {
-        hours = 0;
-      }
-      
-      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
-        return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
-      }
-    }
-    
-    return null;
-  }
-
-  /**
    * Validate and clean final results
    */
   validateAndCleanResults(events) {
@@ -482,18 +538,21 @@ Rules:
   getExtractorStats() {
     return {
       extractorType: 'hybrid',
-      version: '2.0.0',
+      version: '2.1.0', // Updated version number
       components: {
         compromise: this.compromiseInitialized,
         llama: !!this.llamaEndpoint,
-        cspCompliant: true
+        cspCompliant: true,
+        enhancedDateValidation: true // New feature flag
       },
       features: [
+        'enhanced date extraction and validation',
         'advanced reasoning with Llama 3.1',
         'CSP-compliant design',
         'basic pattern fallback',
         'confidence scoring',
-        'input validation'
+        'input validation',
+        'intelligent date parsing'
       ],
       supportedEventTypes: Object.keys(this.eventTypes)
     };
@@ -504,18 +563,20 @@ Rules:
    */
   async testExtraction() {
     const testEmail = `
-      Subject: Team Meeting
+      Subject: Assignment Due and Team Meeting
       
       Hi everyone,
       
-      Let's have our weekly team meeting tomorrow at 2 PM in the conference room.
+      Just a reminder that the CS101 assignment was due on Sunday, 8 June 2025 at 11:59 PM.
+      
+      Also, let's have our weekly team meeting tomorrow at 2 PM in the conference room.
       
       Best regards,
       John
     `;
     
-    console.log('🧪 Testing hybrid extraction...');
-    const results = await this.extractEvents(testEmail, 'Team Meeting');
+    console.log('🧪 Testing enhanced hybrid extraction...');
+    const results = await this.extractEvents(testEmail, 'Assignment Due and Team Meeting');
     console.log('🎯 Test results:', results);
     return results;
   }
