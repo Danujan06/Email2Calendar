@@ -136,23 +136,39 @@ class CalendarAPI {
   }
 
   formatEventForAPI(eventData) {
-    // Create event object with proper time handling
+    console.log('📝 Formatting event for Calendar API:', eventData);
+    
+    // Build the event object
     const event = {
       summary: eventData.title || 'Event',
       description: this.buildDescription(eventData),
       location: eventData.location || undefined
     };
 
-    // CRITICAL FIX: Proper date/time handling with timezone
-    if (eventData.startTime && eventData.startTime !== 'Time TBD' && eventData.startTime !== null) {
-      // Timed event - use dateTime format with proper timezone
-      console.log('⏰ Creating timed event with timezone handling');
+    // CRITICAL FIX: Proper date/time handling
+    const eventDate = this.validateAndFormatDate(eventData.date);
+    const eventTime = this.validateAndFormatTime(eventData.startTime || eventData.time);
+    
+    console.log('📅 Processed date:', eventDate);
+    console.log('⏰ Processed time:', eventTime);
+
+    if (!eventDate) {
+      throw new Error('Invalid event date provided');
+    }
+
+    // Handle time-specific events vs all-day events
+    if (eventTime && eventTime !== 'Time TBD') {
+      console.log('⏰ Creating timed event');
       
+      // For timed events, use dateTime format
       const userTimezone = this.getUserTimezone();
       console.log('🌍 User timezone:', userTimezone);
       
-      const startDateTime = this.createProperDateTimeString(eventData.date, eventData.startTime, userTimezone);
-      const endDateTime = this.createProperDateTimeString(eventData.date, eventData.endTime || this.addHour(eventData.startTime), userTimezone);
+      const startDateTime = `${eventDate}T${eventTime}:00`;
+      
+      // For assignments/deadlines, use the exact submission time
+      // Add 5 minutes for end time to make it visible in calendar
+      const endDateTime = this.addMinutesToTime(eventDate, eventTime, 5);
       
       event.start = {
         dateTime: startDateTime,
@@ -163,16 +179,17 @@ class CalendarAPI {
         timeZone: userTimezone
       };
       
-      console.log('📅 Timed event created with proper timezone:', {
+      console.log('📅 Timed event created:', {
         start: event.start,
         end: event.end
       });
+      
     } else {
-      // All-day event - use date format
       console.log('📅 Creating all-day event');
       
-      event.start = { date: eventData.date };
-      event.end = { date: this.getNextDay(eventData.date) };
+      // For all-day events, use date format
+      event.start = { date: eventDate };
+      event.end = { date: this.getNextDay(eventDate) };
       
       console.log('📅 All-day event created:', {
         start: event.start,
@@ -181,6 +198,132 @@ class CalendarAPI {
     }
 
     return event;
+  }
+
+  /**
+   * ADDED: Validate and format date to YYYY-MM-DD
+   */
+  validateAndFormatDate(dateInput) {
+    if (!dateInput) {
+      console.log('⚠️ No date provided, using today');
+      return new Date().toISOString().split('T')[0];
+    }
+    
+    console.log('📅 Processing date input:', dateInput);
+    
+    // If already in YYYY-MM-DD format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) {
+      console.log('✅ Date already in correct format');
+      return dateInput;
+    }
+    
+    // Try to parse various date formats
+    try {
+      // Handle "Wed, Jun 11" format (add current year)
+      if (/^\w+,?\s+\w+\s+\d{1,2}$/.test(dateInput)) {
+        const currentYear = new Date().getFullYear();
+        const dateWithYear = `${dateInput} ${currentYear}`;
+        console.log('📅 Adding year to date:', dateWithYear);
+        
+        const parsed = new Date(dateWithYear);
+        if (!isNaN(parsed.getTime())) {
+          const result = parsed.toISOString().split('T')[0];
+          console.log('✅ Parsed date with year:', result);
+          return result;
+        }
+      }
+      
+      // Try direct parsing
+      const parsed = new Date(dateInput);
+      if (!isNaN(parsed.getTime())) {
+        const result = parsed.toISOString().split('T')[0];
+        console.log('✅ Parsed date directly:', result);
+        return result;
+      }
+      
+      console.error('❌ Could not parse date:', dateInput);
+      return new Date().toISOString().split('T')[0]; // Fallback to today
+      
+    } catch (error) {
+      console.error('❌ Date parsing error:', error);
+      return new Date().toISOString().split('T')[0]; // Fallback to today
+    }
+  }
+
+  /**
+   * ADDED: Validate and format time to HH:MM
+   */
+  validateAndFormatTime(timeInput) {
+    if (!timeInput || timeInput === 'Time TBD' || timeInput === null) {
+      console.log('⚠️ No valid time provided');
+      return null;
+    }
+    
+    console.log('⏰ Processing time input:', timeInput);
+    
+    // If already in HH:MM format
+    if (/^\d{2}:\d{2}$/.test(timeInput)) {
+      console.log('✅ Time already in correct format');
+      return timeInput;
+    }
+    
+    // Parse various time formats
+    const timeMatch = timeInput.match(/(\d{1,2}):?(\d{2})?\s*(am|pm|a\.?m\.?|p\.?m\.?)?/i);
+    
+    if (timeMatch) {
+      let hours = parseInt(timeMatch[1]);
+      const minutes = timeMatch[2] ? parseInt(timeMatch[2]) : 0;
+      const ampm = timeMatch[3] ? timeMatch[3].toLowerCase() : '';
+      
+      console.log('⏰ Parsed time components:', { hours, minutes, ampm });
+      
+      // Convert to 24-hour format
+      if (ampm.includes('pm') && hours !== 12) {
+        hours += 12;
+      } else if (ampm.includes('am') && hours === 12) {
+        hours = 0;
+      }
+      
+      // Validate time
+      if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+        const result = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+        console.log('✅ Formatted time:', result);
+        return result;
+      }
+    }
+    
+    console.error('❌ Could not parse time:', timeInput);
+    return null;
+  }
+
+  /**
+   * ADDED: Add minutes to a date/time combination
+   */
+  addMinutesToTime(date, time, minutesToAdd) {
+    try {
+      const [hours, minutes] = time.split(':').map(Number);
+      const totalMinutes = hours * 60 + minutes + minutesToAdd;
+      
+      const newHours = Math.floor(totalMinutes / 60) % 24;
+      const newMinutes = totalMinutes % 60;
+      
+      const newTime = `${newHours.toString().padStart(2, '0')}:${newMinutes.toString().padStart(2, '0')}`;
+      
+      // If we rolled over to next day, adjust the date
+      if (Math.floor(totalMinutes / 60) >= 24) {
+        const nextDay = new Date(date);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const newDate = nextDay.toISOString().split('T')[0];
+        return `${newDate}T${newTime}:00`;
+      }
+      
+      return `${date}T${newTime}:00`;
+      
+    } catch (error) {
+      console.error('❌ Error adding minutes to time:', error);
+      // Fallback: just add 5 minutes as string
+      return `${date}T${time}:00`;
+    }
   }
 
   async makeAPIRequest(url, method, data, token, attempt = 1) {
@@ -256,26 +399,6 @@ class CalendarAPI {
 
   delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  // CRITICAL FIX: Proper datetime string creation with timezone
-  createProperDateTimeString(date, time, timezone) {
-    // Ensure date is in YYYY-MM-DD format
-    const dateStr = this.normalizeDate(date);
-    
-    // Ensure time is in HH:MM format
-    const timeStr = this.normalizeTime(time);
-    
-    if (!dateStr || !timeStr) {
-      throw new Error(`Invalid date/time: date=${dateStr}, time=${timeStr}`);
-    }
-    
-    // Create proper datetime string WITHOUT timezone suffix
-    // Let Google Calendar API handle timezone through the timeZone field
-    const dateTimeString = `${dateStr}T${timeStr}:00`;
-    
-    console.log(`🕐 Created datetime string: ${dateTimeString} (timezone: ${timezone})`);
-    return dateTimeString;
   }
 
   // Get user's timezone in IANA format
@@ -397,6 +520,11 @@ class CalendarAPI {
   buildDescription(eventData) {
     let description = eventData.description || '';
     
+    // Add special note for deadlines
+    if (eventData.type === 'deadline' || eventData.type === 'academic') {
+      description += '\n\n⏰ Assignment Deadline';
+    }
+    
     if (eventData.source) {
       description += `\n\n--- Extracted by Email2Calendar ---\nSource: ${eventData.source}`;
       if (eventData.confidence) {
@@ -431,6 +559,26 @@ class CalendarAPI {
       const normalized = this.normalizeTime(time);
       console.log(`  "${time}" → "${normalized}"`);
     });
+  }
+
+  // CRITICAL FIX: Proper datetime string creation with timezone
+  createProperDateTimeString(date, time, timezone) {
+    // Ensure date is in YYYY-MM-DD format
+    const dateStr = this.normalizeDate(date);
+    
+    // Ensure time is in HH:MM format
+    const timeStr = this.normalizeTime(time);
+    
+    if (!dateStr || !timeStr) {
+      throw new Error(`Invalid date/time: date=${dateStr}, time=${timeStr}`);
+    }
+    
+    // Create proper datetime string WITHOUT timezone suffix
+    // Let Google Calendar API handle timezone through the timeZone field
+    const dateTimeString = `${dateStr}T${timeStr}:00`;
+    
+    console.log(`🕐 Created datetime string: ${dateTimeString} (timezone: ${timezone})`);
+    return dateTimeString;
   }
 }
 
