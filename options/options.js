@@ -14,7 +14,10 @@ class OptionsManager {
       showNotifications: true,
       soundEnabled: false,
       localProcessing: true,
-      logActivity: false
+      logActivity: false,
+      extractorType: 'hybrid',
+      togetherApiKey: '',
+      hybridMode: 'compromise_first'
     };
     
     this.init();
@@ -205,9 +208,24 @@ class OptionsManager {
       status.className = 'save-status';
     }, 3000);
   }
+
+  toggleHybridSettings(extractorType) {
+    const togetherApiKeyGroup = document.getElementById('togetherApiKeyGroup');
+    const hybridModeGroup = document.getElementById('hybridModeGroup');
+    
+    if (togetherApiKeyGroup && hybridModeGroup) {
+      const showHybridSettings = extractorType === 'hybrid';
+      togetherApiKeyGroup.style.display = showHybridSettings ? 'block' : 'none';
+      hybridModeGroup.style.display = showHybridSettings ? 'block' : 'none';
+    }
+  }
 }
 
 // Initialize options page
 document.addEventListener('DOMContentLoaded', () => {
   new OptionsManager();
+});
+
+document.getElementById('extractorType').addEventListener('change', (e) => {
+  this.toggleHybridSettings(e.target.value);
 });
